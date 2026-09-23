@@ -1,4 +1,5 @@
-import { analyzeOffline, buildContext } from '../analyzer/offline';
+import { buildContext } from '../analyzer/offline';
+import { runOffline } from '../analyzer/runOffline';
 import { finalize } from '../analyzer/finalize';
 import { buildAnalysisPrompt, buildRepairPrompt, type PreScan } from '../prompts/build';
 import { truncatedInputs, truncationMessage } from '../prompts/limits';
@@ -110,8 +111,7 @@ export async function runAnalysis(
 ): Promise<{ result: AnalysisResult; info: LlmRunInfo | null }> {
   const client = clientFor(settings);
   if (!client) {
-    const payload = analyzeOffline(cv, job, lang);
-    return { result: finalize(payload, { cv, language: lang, provider: 'offline', model: null }), info: null };
+    return { result: runOffline(cv, job, lang), info: null };
   }
   const { payload, info } = await completeWithRepair(client, cv, job, lang, { preScan: preScan(cv, job), signal });
   const extraNotes = truncatedInputs(cv, job).map((t) => truncationMessage(t));

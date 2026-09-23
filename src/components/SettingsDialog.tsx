@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
-import type { ProviderSettings } from '../providers/types';
+import { OLLAMA_CORS_HINT, type ProviderSettings } from '../providers/types';
 import type { ProviderId } from '../types';
-import { OLLAMA_CORS_HINT } from '../providers/ollama';
 import { Dialog } from './Dialog';
 import { IconShield, IconTrash } from './Icons';
 

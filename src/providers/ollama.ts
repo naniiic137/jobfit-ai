@@ -1,13 +1,13 @@
 import { postJson } from './http';
-import { ProviderError, type CompletionRequest, type LlmClient } from './types';
+import { OLLAMA_CORS_HINT, ProviderError, type CompletionRequest, type LlmClient } from './types';
+
+export { OLLAMA_CORS_HINT };
 
 interface OllamaChatResponse {
   message?: { content?: string };
   error?: string;
 }
 
-export const OLLAMA_CORS_HINT =
-  'Ollama rejects browser requests from other origins by default. Restart it with OLLAMA_ORIGINS set, for example: OLLAMA_ORIGINS="https://naniiic137.github.io,http://localhost:5182" ollama serve';
 
 /**
  * A local model through Ollama's /api/chat endpoint. `format` accepts a JSON

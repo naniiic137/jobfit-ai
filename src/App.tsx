@@ -31,7 +31,7 @@ import {
   saveTheme,
   type Theme,
 } from './lib/storage';
-import { runAnalysis } from './providers/run';
+import { runOffline } from './analyzer/runOffline';
 import { truncatedInputs, truncationMessage } from './prompts/limits';
 import { ProviderError, type ProviderSettings } from './providers/types';
 import type { AnalysisResult, OutputLanguage } from './types';
@@ -110,7 +110,12 @@ export default function App() {
     const ctrl = new AbortController();
     abortRef.current = ctrl;
     try {
-      const { result: r, info } = await runAnalysis(settings, cv, job, lang, ctrl.signal);
+      // The offline path is synchronous and zod-free; the LLM path (providers, prompts,
+      // zod validation) is only downloaded when an LLM provider is actually used.
+      const { result: r, info } =
+        settings.provider === 'offline'
+          ? { result: runOffline(cv, job, lang), info: null }
+          : await import('./providers/run').then((m) => m.runAnalysis(settings, cv, job, lang, ctrl.signal));
       setResult(r);
       setHistory((h) => pushHistory(r, h));
       setStatus(`Analysis ready: score ${r.scoreDetails.score} out of 100${info?.repaired ? ' (model output was repaired once)' : ''}.`);
