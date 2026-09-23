@@ -3,6 +3,8 @@ import type { ProviderId } from '../types';
 
 export interface ProviderSettings {
   provider: ProviderId;
+  /** Keep API keys in localStorage across sessions (off by default: sessionStorage only). */
+  rememberKeys: boolean;
   gemini: { apiKey: string; model: string };
   ollama: { baseUrl: string; model: string };
   openai: { baseUrl: string; apiKey: string; model: string };
@@ -10,6 +12,7 @@ export interface ProviderSettings {
 
 export const DEFAULT_SETTINGS: ProviderSettings = {
   provider: 'offline',
+  rememberKeys: false,
   // A free-tier Gemini model at the time of writing; editable in Settings.
   gemini: { apiKey: '', model: 'gemini-3.5-flash-lite' },
   ollama: { baseUrl: 'http://localhost:11434', model: 'llama3.2' },

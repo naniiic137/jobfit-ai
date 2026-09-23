@@ -20,11 +20,13 @@ import {
   forgetKeys,
   loadDraft,
   loadHistory,
+  mergeHistory,
   loadSettings,
   loadTheme,
   pushHistory,
   removeHistory,
   saveDraft,
+  saveHistory,
   saveSettings,
   saveTheme,
   type Theme,
@@ -55,7 +57,7 @@ export default function App() {
   const [job, setJob] = useState(() => loadDraft().job);
   const [lang, setLang] = useState<OutputLanguage>('en');
   const [result, setResult] = useState<AnalysisResult | null>(null);
-  const [history, setHistory] = useState<AnalysisResult[]>(loadHistory);
+  const [history, setHistory] = useState<AnalysisResult[]>([]);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState('');
   const [error, setError] = useState<{ message: string; hint?: string } | null>(null);
@@ -65,6 +67,23 @@ export default function App() {
   const resultsRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const abortRef = useRef<AbortController | null>(null);
+
+  // History is validated (lazily, with zod) before it is shown; invalid entries are dropped.
+  useEffect(() => {
+    let alive = true;
+    void loadHistory().then((loaded) => {
+      if (!alive) return;
+      // Keep anything analysed while the validator was loading.
+      setHistory((current) => {
+        const merged = mergeHistory(current, loaded);
+        if (merged.length !== loaded.length) saveHistory(merged);
+        return merged;
+      });
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   // Never leave a request running after the app goes away.
   useEffect(() => () => abortRef.current?.abort(), []);

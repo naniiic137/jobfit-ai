@@ -140,12 +140,22 @@ export function SettingsDialog({
           </div>
         )}
 
+        {(draft.provider === 'gemini' || draft.provider === 'openai') && (
+          <label className="check">
+            <input type="checkbox" checked={draft.rememberKeys} onChange={(e) => set('rememberKeys', e.target.checked)} />
+            <span>
+              Remember API keys on this device
+              <small>Off: keys stay in this tab&apos;s session and are gone when you close the browser. On: kept in localStorage.</small>
+            </span>
+          </label>
+        )}
+
         <div className="privacy">
           <IconShield />
           <p>
-            <strong>Privacy.</strong> There is no JobFit server. Keys are saved only in this browser&apos;s localStorage and are sent only to the
-            provider you pick, together with your CV and the job ad. Offline mode sends nothing anywhere. On a shared computer, use “Forget keys”
-            when you are done.
+            <strong>Privacy.</strong> There is no JobFit server. By default, keys live only in this browser session (sessionStorage) and are sent
+            only to the provider you pick, together with your CV and the job ad. Offline mode sends nothing anywhere. On a shared computer, leave
+            “Remember” off and use “Forget keys” when you are done.
           </p>
         </div>
 

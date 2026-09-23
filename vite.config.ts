@@ -10,6 +10,6 @@ export default defineConfig({
   preview: { port: 5182, strictPort: true },
   test: {
     environment: 'node',
-    include: ['src/**/*.test.ts'],
+    include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
   },
 });
