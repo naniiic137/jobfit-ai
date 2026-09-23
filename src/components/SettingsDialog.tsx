@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { OLLAMA_CORS_HINT, type ProviderSettings } from '../providers/types';
+import { useEffect, useRef, useState } from 'react';
+import { OLLAMA_CORS_HINT, validateSettings, type ProviderSettings, type SettingsErrors, type SettingsField } from '../providers/types';
 import type { ProviderId } from '../types';
 import { Dialog } from './Dialog';
 import { IconShield, IconTrash } from './Icons';
@@ -28,19 +28,46 @@ export function SettingsDialog({
 }) {
   const [draft, setDraft] = useState(settings);
   const [showKey, setShowKey] = useState(false);
+  // Errors are shown only after a Save attempt, then kept up to date while the user fixes them.
+  const [showErrors, setShowErrors] = useState(false);
+  const errors: SettingsErrors | null = showErrors ? validateSettings(draft) : null;
+  const formRef = useRef<HTMLFormElement>(null);
   useEffect(() => {
-    if (open) setDraft(settings);
+    if (open) {
+      setDraft(settings);
+      setShowErrors(false);
+    }
   }, [open, settings]);
 
   const set = <K extends keyof ProviderSettings>(k: K, v: ProviderSettings[K]) => setDraft((d) => ({ ...d, [k]: v }));
   const hasKey = Boolean(settings.gemini.apiKey || settings.openai.apiKey);
+  const err = (f: SettingsField) => errors?.[f];
+  const errId = (f: SettingsField) => `settings-${f}-error`;
+  const fieldProps = (f: SettingsField) => ({
+    'aria-invalid': err(f) ? true : undefined,
+    'aria-describedby': err(f) ? errId(f) : undefined,
+  });
+  const errorText = (f: SettingsField) =>
+    err(f) ? (
+      <small className="field__error" id={errId(f)}>
+        {err(f)}
+      </small>
+    ) : null;
 
   return (
     <Dialog open={open} onClose={onClose} title="AI provider">
       <form
         className="settings"
+        ref={formRef}
+        noValidate
         onSubmit={(e) => {
           e.preventDefault();
+          if (Object.keys(validateSettings(draft)).length) {
+            // Never save a provider that cannot work (e.g. Gemini without a key).
+            setShowErrors(true);
+            requestAnimationFrame(() => formRef.current?.querySelector<HTMLInputElement>('[aria-invalid="true"]')?.focus());
+            return;
+          }
           onSave(draft);
         }}
       >
@@ -67,11 +94,13 @@ export function SettingsDialog({
                   placeholder="AIza…"
                   value={draft.gemini.apiKey}
                   onChange={(e) => set('gemini', { ...draft.gemini, apiKey: e.target.value })}
+                  {...fieldProps('apiKey')}
                 />
                 <button type="button" className="btn btn--ghost" onClick={() => setShowKey((v) => !v)}>
                   {showKey ? 'Hide' : 'Show'}
                 </button>
               </div>
+              {errorText('apiKey')}
               <small>
                 Get a free key at{' '}
                 <a href="https://aistudio.google.com/apikey" target="_blank" rel="noreferrer">
@@ -82,7 +111,13 @@ export function SettingsDialog({
             </label>
             <label className="field">
               <span>Model</span>
-              <input list="gemini-models" value={draft.gemini.model} onChange={(e) => set('gemini', { ...draft.gemini, model: e.target.value })} />
+              <input
+                list="gemini-models"
+                value={draft.gemini.model}
+                onChange={(e) => set('gemini', { ...draft.gemini, model: e.target.value })}
+                {...fieldProps('model')}
+              />
+              {errorText('model')}
               <datalist id="gemini-models">
                 {GEMINI_MODELS.map((m) => (
                   <option key={m} value={m} />
@@ -97,11 +132,18 @@ export function SettingsDialog({
           <div className="fields">
             <label className="field">
               <span>Base URL</span>
-              <input value={draft.ollama.baseUrl} onChange={(e) => set('ollama', { ...draft.ollama, baseUrl: e.target.value })} />
+              <input value={draft.ollama.baseUrl} onChange={(e) => set('ollama', { ...draft.ollama, baseUrl: e.target.value })} {...fieldProps('baseUrl')} />
+              {errorText('baseUrl')}
             </label>
             <label className="field">
               <span>Model</span>
-              <input value={draft.ollama.model} placeholder="llama3.2, qwen2.5, mistral…" onChange={(e) => set('ollama', { ...draft.ollama, model: e.target.value })} />
+              <input
+                value={draft.ollama.model}
+                placeholder="llama3.2, qwen2.5, mistral…"
+                onChange={(e) => set('ollama', { ...draft.ollama, model: e.target.value })}
+                {...fieldProps('model')}
+              />
+              {errorText('model')}
               <small>Pull it first: <code>ollama pull {draft.ollama.model || 'llama3.2'}</code></small>
             </label>
             <p className="callout">{OLLAMA_CORS_HINT}</p>
@@ -112,7 +154,8 @@ export function SettingsDialog({
           <div className="fields">
             <label className="field">
               <span>Base URL</span>
-              <input value={draft.openai.baseUrl} onChange={(e) => set('openai', { ...draft.openai, baseUrl: e.target.value })} />
+              <input value={draft.openai.baseUrl} onChange={(e) => set('openai', { ...draft.openai, baseUrl: e.target.value })} {...fieldProps('baseUrl')} />
+              {errorText('baseUrl')}
               <small>
                 Must end before <code>/chat/completions</code>. Groq: <code>https://api.groq.com/openai/v1</code>
               </small>
@@ -126,15 +169,18 @@ export function SettingsDialog({
                   spellCheck={false}
                   value={draft.openai.apiKey}
                   onChange={(e) => set('openai', { ...draft.openai, apiKey: e.target.value })}
+                  {...fieldProps('apiKey')}
                 />
                 <button type="button" className="btn btn--ghost" onClick={() => setShowKey((v) => !v)}>
                   {showKey ? 'Hide' : 'Show'}
                 </button>
               </div>
+              {errorText('apiKey')}
             </label>
             <label className="field">
               <span>Model</span>
-              <input value={draft.openai.model} onChange={(e) => set('openai', { ...draft.openai, model: e.target.value })} />
+              <input value={draft.openai.model} onChange={(e) => set('openai', { ...draft.openai, model: e.target.value })} {...fieldProps('model')} />
+              {errorText('model')}
             </label>
           </div>
         )}
