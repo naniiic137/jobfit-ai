@@ -1,9 +1,9 @@
 import type { AnalysisPayload, BulletSuggestion, Importance, InterviewQuestion, SkillAssessment } from '../schemas/analysis';
 import type { OutputLanguage } from '../types';
-import { bestEvidenceIndex, cvSkillMap, extractSkills, isSpellingOf, lineAt, normalize, replaceToken, snippetAt, type ExtractedSkill } from './extract';
+import { bestEvidenceIndex, cvSkillMap, extractSkills, isSpellingOf, normalize, replaceToken, snippetAt, type ExtractedSkill } from './extract';
 import { cvFacts, jobFacts, type CvFacts, type JobFacts } from './facts';
 import { computeScore, LOW_COVERAGE, scoreBand, skillWeight } from './score';
-import { detectSections, importanceFor, sectionAt } from './sections';
+import { detectSections, importanceAt, sectionAt } from './sections';
 import type { SkillCategory } from '../schemas/analysis';
 import { skillLabel, TAXONOMY_BY_ID } from './taxonomy';
 import { COVER, QUESTION_BANK, SOFT_QUESTIONS, WEAK_OPENINGS, formatYears, listJoin, t } from './templates';
@@ -31,7 +31,7 @@ export function jobSkills(job: string): JobSkill[] {
     let importance: Importance | null = null;
     let surface = ex.hits[0]!.surface;
     for (const hit of ex.hits) {
-      const imp = importanceFor(sectionAt(sections, hit.index).kind, lineAt(job, hit.index));
+      const imp = importanceAt(sectionAt(sections, hit.index).kind, job, hit.index);
       if (imp === 'required') {
         importance = 'required';
         surface = hit.surface;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { classifyHeading, detectSections, importanceFor } from './sections';
+import { classifyHeading, detectSections, importanceAt, importanceFor, inlineMarker } from './sections';
 import { jobSkills } from './offline';
 
 describe('classifyHeading', () => {
@@ -50,7 +50,38 @@ describe('importanceFor', () => {
   });
 });
 
+describe('inlineMarker (per clause)', () => {
+  const at = (line: string, word: string) => inlineMarker(line, line.indexOf(word));
+  it.each([
+    ['- React is required, TypeScript is a plus', 'React', 'required'],
+    ['- React is required, TypeScript is a plus', 'TypeScript', 'nice'],
+    ['- React and TypeScript, Docker is a plus', 'React', null],
+    ['- React and TypeScript, Docker is a plus', 'Docker', 'nice'],
+    ['- Docker, Kubernetes and Terraform are a plus', 'Docker', 'nice'],
+    ['- Docker and Kubernetes is a plus', 'Docker', 'nice'],
+    ['- Docker or Podman experience is a plus', 'Docker', 'nice'],
+    ['- Nice to have: Kafka, Kubernetes', 'Kubernetes', 'nice'],
+    ['- React; Docker is a plus', 'React', null],
+    ['- Maîtrise de React, Docker serait un plus', 'React', null],
+    ['- Maîtrise de React, Docker serait un plus', 'Docker', 'nice'],
+    ['- Strong React skills, Next.js is a bonus', 'React', 'required'],
+  ])('%s → %s is %s', (line, word, expected) => {
+    expect(at(line, word)).toBe(expected);
+  });
+
+  it('turns into section-aware importance', () => {
+    const ad = 'Requirements\n- React is required, TypeScript is a plus';
+    expect(importanceAt('required', ad, ad.indexOf('React'))).toBe('required');
+    expect(importanceAt('required', ad, ad.indexOf('TypeScript'))).toBe('nice');
+  });
+});
+
 describe('jobSkills (section-aware extraction)', () => {
+  it('reads "React is required, TypeScript is a plus" per clause', () => {
+    const s = Object.fromEntries(jobSkills('Frontend Developer\nRequirements\n- React is required, TypeScript is a plus\n- Redux').map((x) => [x.id, x.importance]));
+    expect(s).toEqual({ react: 'required', typescript: 'nice', redux: 'required' });
+  });
+
   const ad = `Frontend Developer at Acme
 Requirements:
 - React and TypeScript
