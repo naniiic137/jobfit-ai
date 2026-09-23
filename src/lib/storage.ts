@@ -1,5 +1,5 @@
 import { DEFAULT_SETTINGS, type ProviderSettings } from '../providers/types';
-import type { AnalysisResult } from '../types';
+import type { AnalysisResult, OutputLanguage } from '../types';
 
 /**
  * Keys are versioned: when the stored shape changes, the version changes and
@@ -147,17 +147,46 @@ export async function loadHistory(): Promise<AnalysisResult[]> {
   return valid;
 }
 
-/** Newest first, no duplicate ids. */
-export function mergeHistory(a: AnalysisResult[], b: AnalysisResult[]): AnalysisResult[] {
-  const seen = new Set<string>();
-  return [...a, ...b]
-    .filter((h) => (seen.has(h.id) ? false : (seen.add(h.id), true)))
-    .sort((x, y) => y.createdAt.localeCompare(x.createdAt))
-    .slice(0, HISTORY_LIMIT);
+/**
+ * Identifies an analysis by what went into it: both texts, the output
+ * language and the provider/model/endpoint. Running the same analysis again
+ * gives the same key, so history keeps one entry for it. (cyrb53 hash: short
+ * and fast; the texts themselves are not stored twice.)
+ */
+export function analysisKey(cv: string, job: string, language: OutputLanguage, s: ProviderSettings): string {
+  const model =
+    s.provider === 'gemini' ? s.gemini.model : s.provider === 'ollama' ? `${s.ollama.baseUrl}|${s.ollama.model}` : s.provider === 'openai' ? `${s.openai.baseUrl}|${s.openai.model}` : '';
+  const text = JSON.stringify([cv.trim(), job.trim(), language, s.provider, model.trim()]);
+  let h1 = 0xdeadbeef;
+  let h2 = 0x41c6ce57;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text.charCodeAt(i);
+    h1 = Math.imul(h1 ^ ch, 2654435761);
+    h2 = Math.imul(h2 ^ ch, 1597334677);
+  }
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+  return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36);
 }
 
+const sameAnalysis = (a: AnalysisResult, b: AnalysisResult) => a.id === b.id || (a.inputKey !== undefined && a.inputKey === b.inputKey);
+
+/** Newest first; one entry per id and per analysis key (the newest wins). */
+export function mergeHistory(a: AnalysisResult[], b: AnalysisResult[]): AnalysisResult[] {
+  const kept: AnalysisResult[] = [];
+  for (const h of [...a, ...b].sort((x, y) => y.createdAt.localeCompare(x.createdAt))) {
+    if (!kept.some((k) => sameAnalysis(k, h))) kept.push(h);
+  }
+  return kept.slice(0, HISTORY_LIMIT);
+}
+
+/**
+ * Adds an analysis at the top. Re-running the same analysis (same key)
+ * replaces the older entry instead of adding a duplicate, so it simply
+ * moves to the top with the new date.
+ */
 export function pushHistory(entry: AnalysisResult, history: AnalysisResult[]): AnalysisResult[] {
-  const next = [entry, ...history.filter((h) => h.id !== entry.id)].slice(0, HISTORY_LIMIT);
+  const next = [entry, ...history.filter((h) => !sameAnalysis(h, entry))].slice(0, HISTORY_LIMIT);
   saveHistory(next);
   return next;
 }

@@ -35,14 +35,14 @@ All screenshots use the bundled sample CV and job ad in offline mode. The candid
 
 - **CV input:** paste it, or upload a PDF. Text is extracted in the browser with pdf.js, which is lazy-loaded so it is only downloaded when you need it.
 - **Match score from 0 to 100** with a breakdown by category (languages, frontend, backend, data, DevOps, AI, tools, practices, soft skills).
-- **Matched and missing skill chips.** Missing skills are marked *required* or *nice to have*, based on the section of the ad (and the clause of the line) they appear in. Hover a matched chip to see the CV line that proves it. When an LLM claims a skill but its quote is not in your CV, it is shown apart as *claimed, not found in CV* and earns no points.
+- **Matched and missing skill chips.** Missing skills are marked *required* or *nice to have*, based on the section of the ad (and the clause of the line) they appear in. Hover a matched chip (or tap it on a phone) to see the CV line that proves it. When an LLM claims a skill but its quote is not in your CV, it is shown apart as *claimed, not found in CV* and earns no points.
 - **Coverage note.** The results say how many skills were recognised in the ad, and warn when there are too few for the score to mean much (for example a non-software ad in offline mode).
 - **Tailored CV bullets** shown as before/after. Weak verbs get replaced, the ad's spelling of a product is reused when it is only a spelling difference ("ReactJS" becomes "React"), and a highlighted placeholder asks for a *real* metric. Other products and versions are never rewritten: "GitLab CI" stays "GitLab CI", "Zustand" never becomes "Redux", "Java 17" keeps its version.
 - **Cover-letter draft** in English or French: copy it, or download it as `.txt` or `.md`.
 - **Likely interview questions**, each with why it may be asked and a tip that points back to your own CV.
 - **History** of past analyses, kept in localStorage (last 20) and validated when loaded, so an old or corrupted entry is dropped instead of breaking the page.
 - **LLM requests you control:** a Cancel button while a model is answering, a 90-second timeout with a readable error, and a warning when your CV or the ad is longer than the 12,000 characters sent to the model.
-- **Sample CV and job ad** so you can try it in one click.
+- **Sample CV and job ad**, in English and French, so you can try it in one click.
 - Dark and light themes, responsive down to 390px, keyboard-accessible tabs and dialogs, and a skip link.
 
 ## How it works
@@ -188,7 +188,7 @@ Click **Try the sample CV + job ad**, then **Analyse match**.
 ## Tests
 
 ```bash
-npm test           # Vitest: 176 tests in 14 files (prints the golden-set table)
+npm test           # Vitest: 196 tests in 15 files (prints the golden-set table)
 npm run build      # tsc --noEmit (strict) + vite build
 ```
 
@@ -228,7 +228,8 @@ src/
 ├── schemas/           # analysis.ts: zod schema + JSON Schema export · categories.ts (zod-free)
 ├── components/        # Results, ScoreGauge, SettingsDialog, HistoryDialog, Dialog, Icons
 ├── lib/               # pdf.ts (pdf.js), storage.ts + historySchema.ts, csp.ts, download.ts
-├── data/samples.ts    # fictional sample CV + job ad
+├── data/samples.ts    # fictional sample CV + job ad (EN + FR)
+├── i18n.ts            # result labels in English and French (typed string table)
 ├── App.tsx · main.tsx · styles.css
 .github/workflows/     # ci.yml (test + build) · deploy.yml (GitHub Pages)
 docs/screenshots/

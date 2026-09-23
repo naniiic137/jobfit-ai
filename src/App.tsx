@@ -14,8 +14,9 @@ import {
   IconSun,
   IconUpload,
 } from './components/Icons';
-import { SAMPLE_CV, SAMPLE_JOB } from './data/samples';
+import { SAMPLES } from './data/samples';
 import {
+  analysisKey,
   clearHistory,
   forgetKeys,
   loadDraft,
@@ -33,7 +34,7 @@ import {
 } from './lib/storage';
 import { runOffline } from './analyzer/runOffline';
 import { truncatedInputs, truncationMessage } from './prompts/limits';
-import { ProviderError, type ProviderSettings } from './providers/types';
+import { ProviderError, validateSettings, type ProviderSettings } from './providers/types';
 import type { AnalysisResult, OutputLanguage } from './types';
 
 const PROVIDER_SHORT: Record<ProviderSettings['provider'], string> = {
@@ -57,6 +58,10 @@ export default function App() {
   const [job, setJob] = useState(() => loadDraft().job);
   const [lang, setLang] = useState<OutputLanguage>('en');
   const [result, setResult] = useState<AnalysisResult | null>(null);
+  // The texts the shown result was made from: once they are edited, the result is stale.
+  const [shownFor, setShownFor] = useState<{ cv: string; job: string } | null>(null);
+  // Bumped to scroll to the results once React has rendered them.
+  const [reveal, setReveal] = useState(0);
   const [history, setHistory] = useState<AnalysisResult[]>([]);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState('');
@@ -98,7 +103,21 @@ export default function App() {
     return () => clearTimeout(t);
   }, [cv, job]);
 
+  // Scroll after the commit (a requestAnimationFrame right after setState could run before
+  // the results exist, leaving phones at the bottom of the empty anchor), then move focus to
+  // the results title so keyboard and screen-reader users land there too.
+  useEffect(() => {
+    if (!reveal) return;
+    const anchor = resultsRef.current;
+    if (!anchor) return;
+    const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    anchor.querySelector<HTMLElement>('.results__title')?.focus({ preventScroll: true });
+    anchor.scrollIntoView({ behavior: reduced ? 'auto' : 'smooth', block: 'start' });
+  }, [reveal]);
+
   const canAnalyze = cv.trim().length >= MIN_CHARS && job.trim().length >= MIN_CHARS && !busy;
+  const stale = Boolean(result && shownFor && (shownFor.cv !== cv || shownFor.job !== job));
+  const keyMissing = Boolean(validateSettings(settings).apiKey);
   // Only LLM providers clip the input; the offline analyzer reads everything.
   const truncated = settings.provider === 'offline' ? [] : truncatedInputs(cv, job);
 
@@ -116,10 +135,12 @@ export default function App() {
         settings.provider === 'offline'
           ? { result: runOffline(cv, job, lang), info: null }
           : await import('./providers/run').then((m) => m.runAnalysis(settings, cv, job, lang, ctrl.signal));
-      setResult(r);
-      setHistory((h) => pushHistory(r, h));
+      const entry: AnalysisResult = { ...r, inputKey: analysisKey(cv, job, lang, settings) };
+      setResult(entry);
+      setShownFor({ cv, job });
+      setHistory((h) => pushHistory(entry, h));
       setStatus(`Analysis ready: score ${r.scoreDetails.score} out of 100${info?.repaired ? ' (model output was repaired once)' : ''}.`);
-      requestAnimationFrame(() => resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+      setReveal((n) => n + 1);
     } catch (e) {
       if ((e as Error).name === 'AbortError') {
         setStatus('Analysis cancelled.');
@@ -154,9 +175,19 @@ export default function App() {
   };
 
   const loadSample = () => {
-    setCv(SAMPLE_CV);
-    setJob(SAMPLE_JOB);
+    setCv(SAMPLES[lang].cv);
+    setJob(SAMPLES[lang].job);
     setError(null);
+  };
+
+  const chooseLang = (l: OutputLanguage) => {
+    setLang(l);
+    // The sample is still loaded unchanged: swap it for the one in the new language.
+    const other = SAMPLES[l === 'en' ? 'fr' : 'en'];
+    if (cv === other.cv && job === other.job) {
+      setCv(SAMPLES[l].cv);
+      setJob(SAMPLES[l].job);
+    }
   };
 
   return (
@@ -175,9 +206,18 @@ export default function App() {
             </span>
           </a>
           <nav className="topbar__actions" aria-label="App">
-            <button type="button" className="pill" onClick={() => setDialog('settings')} aria-label={`AI provider: ${PROVIDER_SHORT[settings.provider]}. Change`}>
-              <span className={`pill__dot pill__dot--${settings.provider}`} aria-hidden="true" />
-              <span className="pill__text">{PROVIDER_SHORT[settings.provider]}</span>
+            <button
+              type="button"
+              className={`pill${keyMissing ? ' pill--warn' : ''}`}
+              onClick={() => setDialog('settings')}
+              aria-label={`AI provider: ${PROVIDER_SHORT[settings.provider]}${keyMissing ? ', API key missing' : ''}. Change`}
+              title={keyMissing ? 'No API key for this provider: add one in Settings or switch to Offline demo.' : undefined}
+            >
+              <span className={`pill__dot pill__dot--${keyMissing ? 'warn' : settings.provider}`} aria-hidden="true" />
+              <span className="pill__text">
+                {PROVIDER_SHORT[settings.provider]}
+                {keyMissing && ' · no key'}
+              </span>
               <IconSettings width={16} height={16} />
             </button>
             <button type="button" className="icon-btn" onClick={() => setDialog('history')} aria-label={`History (${history.length})`}>
@@ -271,7 +311,7 @@ export default function App() {
           <div className="actions__right">
             <div className="segmented" role="radiogroup" aria-label="Output language">
               {(['en', 'fr'] as const).map((l) => (
-                <button key={l} type="button" role="radio" aria-checked={lang === l} className="segmented__btn" onClick={() => setLang(l)}>
+                <button key={l} type="button" role="radio" aria-checked={lang === l} className="segmented__btn" onClick={() => chooseLang(l)}>
                   {l === 'en' ? 'English' : 'Français'}
                 </button>
               ))}
@@ -307,8 +347,18 @@ export default function App() {
           </div>
         )}
 
-        <div ref={resultsRef} className="results-anchor">
-          {result && <Results key={result.id} result={result} />}
+        <div ref={resultsRef} className={`results-anchor${stale ? ' results-anchor--stale' : ''}`}>
+          {result && stale && (
+            <p className="stale-note" role="note">
+              <strong>Out of date.</strong> These results are for the previous texts.{' '}
+              {canAnalyze ? 'Analyse again to update them.' : 'Fix the texts above, then analyse again.'}
+            </p>
+          )}
+          {result && (
+            <div className="results-wrap">
+              <Results key={result.id} result={result} />
+            </div>
+          )}
         </div>
       </main>
 
@@ -341,8 +391,9 @@ export default function App() {
         history={history}
         onOpen={(r) => {
           setResult(r);
+          setShownFor({ cv, job });
           setDialog(null);
-          requestAnimationFrame(() => resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+          setReveal((n) => n + 1);
         }}
         onRemove={(id) => setHistory((h) => removeHistory(id, h))}
         onClear={() => {

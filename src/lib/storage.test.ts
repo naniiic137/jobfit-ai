@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it } from 'vitest';
-import { clearHistory, forgetKeys, KEYS, loadHistory, loadSettings, pushHistory, saveSettings } from './storage';
+import { analysisKey, clearHistory, forgetKeys, KEYS, loadHistory, loadSettings, mergeHistory, pushHistory, saveSettings } from './storage';
 import { finalize } from '../analyzer/finalize';
 import { analyzeOffline } from '../analyzer/offline';
 import { SAMPLE_CV, SAMPLE_JOB } from '../data/samples';
@@ -48,6 +48,52 @@ describe('history', () => {
     expect(localStorage.getItem(KEYS.legacyHistory)).toBeNull();
     clearHistory();
     expect(await loadHistory()).toEqual([]);
+  });
+});
+
+describe('history dedupe', () => {
+  const at = (iso: string, inputKey?: string): AnalysisResult => ({ ...result(), id: `id-${iso}`, createdAt: iso, inputKey });
+
+  it('keys an analysis by its texts, language and provider/model', () => {
+    const k = analysisKey(SAMPLE_CV, SAMPLE_JOB, 'en', DEFAULT_SETTINGS);
+    expect(analysisKey(`  ${SAMPLE_CV}  `, SAMPLE_JOB, 'en', DEFAULT_SETTINGS)).toBe(k);
+    expect(analysisKey(SAMPLE_CV, SAMPLE_JOB, 'fr', DEFAULT_SETTINGS)).not.toBe(k);
+    expect(analysisKey(SAMPLE_CV, `${SAMPLE_JOB} Docker`, 'en', DEFAULT_SETTINGS)).not.toBe(k);
+    const gemini = { ...DEFAULT_SETTINGS, provider: 'gemini' as const };
+    expect(analysisKey(SAMPLE_CV, SAMPLE_JOB, 'en', gemini)).not.toBe(k);
+    expect(analysisKey(SAMPLE_CV, SAMPLE_JOB, 'en', { ...gemini, gemini: { ...gemini.gemini, model: 'other' } })).not.toBe(
+      analysisKey(SAMPLE_CV, SAMPLE_JOB, 'en', gemini),
+    );
+    // The API key is not part of it.
+    expect(analysisKey(SAMPLE_CV, SAMPLE_JOB, 'en', { ...gemini, gemini: { ...gemini.gemini, apiKey: 'x' } })).toBe(
+      analysisKey(SAMPLE_CV, SAMPLE_JOB, 'en', gemini),
+    );
+  });
+
+  it('replaces the same analysis instead of adding a duplicate, moving it to the top', () => {
+    let h = pushHistory(at('2026-09-20T10:00:00Z', 'same'), []);
+    h = pushHistory(at('2026-09-21T10:00:00Z', 'other'), h);
+    h = pushHistory(at('2026-09-22T10:00:00Z', 'same'), h);
+    expect(h.map((e) => [e.inputKey, e.createdAt])).toEqual([
+      ['same', '2026-09-22T10:00:00Z'],
+      ['other', '2026-09-21T10:00:00Z'],
+    ]);
+    expect(JSON.parse(localStorage.getItem(KEYS.history)!)).toHaveLength(2);
+  });
+
+  it('keeps entries saved before keys existed', () => {
+    const h = pushHistory(at('2026-09-22T10:00:00Z'), [at('2026-09-20T10:00:00Z')]);
+    expect(h).toHaveLength(2);
+  });
+
+  it('merges loaded and new entries by key, newest first', () => {
+    const merged = mergeHistory([at('2026-09-22T10:00:00Z', 'k')], [at('2026-09-20T10:00:00Z', 'k'), at('2026-09-21T10:00:00Z', 'j')]);
+    expect(merged.map((e) => e.createdAt)).toEqual(['2026-09-22T10:00:00Z', '2026-09-21T10:00:00Z']);
+  });
+
+  it('stores the key and reads it back', async () => {
+    pushHistory(at('2026-09-22T10:00:00Z', 'abc123'), []);
+    expect((await loadHistory())[0]!.inputKey).toBe('abc123');
   });
 });
 

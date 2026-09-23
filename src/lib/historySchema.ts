@@ -28,6 +28,7 @@ export const AnalysisResultSchema = AnalysisPayloadSchema.extend({
     niceTotal: count,
   }),
   breakdown: z.array(z.object({ category: SkillCategorySchema, matched: count, total: count })),
+  inputKey: z.string().max(40).optional(),
 });
 
 /** Keep the valid entries, drop the rest. Never throws. */

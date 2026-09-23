@@ -240,6 +240,15 @@ main.container {
   background: var(--accent);
   box-shadow: 0 0 0 3px var(--accent-soft);
 }
+/* The selected provider has no API key: say so in the header instead of pretending it works. */
+.pill--warn {
+  border-color: color-mix(in srgb, var(--warn) 55%, transparent);
+  color: var(--warn-text);
+}
+.pill__dot--warn {
+  background: var(--warn);
+  box-shadow: 0 0 0 3px var(--warn-soft);
+}
 .icon-btn {
   position: relative;
   display: inline-grid;
@@ -278,6 +287,7 @@ main.container {
   max-width: 760px;
 }
 .hero h1 {
+  text-wrap: balance;
   font-family: var(--font-display);
   font-size: clamp(30px, 4.6vw, 46px);
   line-height: 1.08;
@@ -553,6 +563,8 @@ main.container {
 }
 .results__title {
   margin: 0;
+  text-wrap: balance;
+  overflow-wrap: anywhere;
   font-family: var(--font-display);
   font-size: clamp(21px, 2.6vw, 27px);
   letter-spacing: -0.015em;
@@ -1278,6 +1290,83 @@ main.container {
   margin: 0;
 }
 
+/* Focus lands on the results title after Analyse; only show a ring for keyboard focus. */
+.results__title:focus {
+  outline: none;
+}
+.results__title:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 4px;
+  border-radius: 4px;
+}
+
+/* Results made from texts that have been edited since: dimmed until the next analysis. */
+.results-wrap {
+  transition: opacity 0.2s, filter 0.2s;
+}
+.results-anchor--stale .results-wrap {
+  opacity: 0.4;
+  filter: grayscale(0.7);
+}
+.stale-note {
+  margin: 28px 0 -18px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: var(--warn-soft);
+  color: var(--warn-text);
+  font-size: 14px;
+}
+
+/* Matched / claimed chips are buttons: tap or click shows the CV line behind them. */
+button.chip {
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 500;
+  cursor: pointer;
+}
+button.chip:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+button.chip[aria-expanded='true'] {
+  box-shadow: 0 0 0 2px currentColor inset;
+}
+.proof {
+  margin: 10px 0 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--ok-soft);
+  color: var(--text-2);
+  font-size: 13.5px;
+  overflow-wrap: anywhere;
+}
+.proof[hidden] {
+  display: none;
+}
+.proof--claimed {
+  background: var(--warn-soft);
+}
+/* Hover hints for mice, tap hints for touch screens. */
+.only-touch {
+  display: none;
+}
+@media (hover: none) {
+  .only-pointer {
+    display: none;
+  }
+  .only-touch {
+    display: inline;
+  }
+}
+
+.field__error {
+  color: var(--danger) !important;
+  font-weight: 500;
+}
+.field input[aria-invalid='true'] {
+  border-color: var(--danger);
+}
+
 /* ── Responsive ─────────────────────────────────────────────────────────── */
 @media (max-width: 900px) {
   .results__grid {
@@ -1304,6 +1393,18 @@ main.container {
   }
   .hero__sub {
     font-size: 15px;
+  }
+  /* The job title can be long ("… (React / Node.js)"): give the company its own line. */
+  .results__title {
+    font-size: 20px;
+  }
+  .results__company {
+    display: block;
+    font-size: 16px;
+    margin-top: 2px;
+  }
+  .results__sep {
+    display: none;
   }
   .hide-sm {
     display: none;

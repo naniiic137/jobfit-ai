@@ -37,4 +37,6 @@ export interface AnalysisResult extends Omit<AnalysisPayload, 'skills'> {
   skills: VerifiedSkill[];
   scoreDetails: ScoreDetails;
   breakdown: CategoryBreakdown[];
+  /** Hash of the inputs (texts, language, provider, model); see `analysisKey()`. Older entries have none. */
+  inputKey?: string;
 }
