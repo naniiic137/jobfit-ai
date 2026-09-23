@@ -5,7 +5,6 @@
 [![CI](https://github.com/naniiic137/jobfit-ai/actions/workflows/ci.yml/badge.svg)](https://github.com/naniiic137/jobfit-ai/actions/workflows/ci.yml)
 
 **Live demo:** https://naniiic137.github.io/jobfit-ai/
-<sub>(The link works once GitHub Pages is enabled for this repository: *Settings → Pages → Source: GitHub Actions*.)</sub>
 
 It runs entirely in the browser. There is no backend and nothing to pay for:
 
@@ -36,11 +35,13 @@ All screenshots use the bundled sample CV and job ad in offline mode. The candid
 
 - **CV input:** paste it, or upload a PDF. Text is extracted in the browser with pdf.js, which is lazy-loaded so it is only downloaded when you need it.
 - **Match score from 0 to 100** with a breakdown by category (languages, frontend, backend, data, DevOps, AI, tools, practices, soft skills).
-- **Matched and missing skill chips.** Missing skills are marked *required* or *nice to have*, based on the section of the ad they appear in. Hover a matched chip to see the CV line that proves it.
-- **Tailored CV bullets** shown as before/after. Weak verbs get replaced, the ad's wording is reused (for example "ReactJS" becomes "React"), and a highlighted placeholder asks for a *real* metric.
+- **Matched and missing skill chips.** Missing skills are marked *required* or *nice to have*, based on the section of the ad (and the clause of the line) they appear in. Hover a matched chip to see the CV line that proves it. When an LLM claims a skill but its quote is not in your CV, it is shown apart as *claimed, not found in CV* and earns no points.
+- **Coverage note.** The results say how many skills were recognised in the ad, and warn when there are too few for the score to mean much (for example a non-software ad in offline mode).
+- **Tailored CV bullets** shown as before/after. Weak verbs get replaced, the ad's spelling of a product is reused when it is only a spelling difference ("ReactJS" becomes "React"), and a highlighted placeholder asks for a *real* metric. Other products and versions are never rewritten: "GitLab CI" stays "GitLab CI", "Zustand" never becomes "Redux", "Java 17" keeps its version.
 - **Cover-letter draft** in English or French: copy it, or download it as `.txt` or `.md`.
 - **Likely interview questions**, each with why it may be asked and a tip that points back to your own CV.
-- **History** of past analyses, kept in localStorage (last 20).
+- **History** of past analyses, kept in localStorage (last 20) and validated when loaded, so an old or corrupted entry is dropped instead of breaking the page.
+- **LLM requests you control:** a Cancel button while a model is answering, a 90-second timeout with a readable error, and a warning when your CV or the ad is longer than the 12,000 characters sent to the model.
 - **Sample CV and job ad** so you can try it in one click.
 - Dark and light themes, responsive down to 390px, keyboard-accessible tabs and dialogs, and a skip link.
 
@@ -57,8 +58,8 @@ All screenshots use the bundled sample CV and job ad in offline mode. The candid
           │ provider = offline                                   │ provider = gemini | ollama | openai
           ▼                                                      ▼
 ┌──────────────────────────┐              ┌──────────────────────────────────────────────┐
-│ Offline analyzer         │              │ prompts/  system rules + 1 few-shot example  │
-│ • taxonomy (107 skills,  │   pre-scan   │           + <cv>/<job_ad> fenced input       │
+│ Offline analyzer         │              │ prompts/  system rules + few-shot (EN or FR) │
+│ • taxonomy (177 skills,  │   pre-scan   │           + <cv>/<job_ad> fenced input       │
 │   EN + FR synonyms)      │─────hint────►│ providers/ gemini · ollama · openaiCompat    │
 │ • section detection      │              │           (raw text out, JSON requested)     │
 │   (required / nice /     │              │ run.ts    extractJson → zod.safeParse        │
@@ -86,10 +87,32 @@ All screenshots use the bundled sample CV and job ad in offline mode. The candid
 
 ### Offline analyzer (no key needed)
 
-1. **Extraction.** `src/analyzer/taxonomy.ts` holds 107 hand-picked skills with aliases (`ReactJS`, `Postgres`, `K8s`…) and French synonyms (`travail en équipe`, `tests unitaires`, `intégration continue`, `apprentissage automatique`…). Matching ignores accents and case, handles tokens like `C++`, `C#`, `.NET`, `Node.js` and `CI/CD`, and doesn't confuse `Java` with `JavaScript`. Ambiguous words (`Go`, `Rust`, `Express`, `Swift`) are only accepted with their capital letter and in a list-like context.
-2. **Section detection.** `src/analyzer/sections.ts` splits the ad into *intro / requirements / nice-to-have / responsibilities / company / perks* using English and French headings ("Profil recherché", "Atouts", "Vos missions"…). Inline markers such as "is a plus" or "serait un plus" downgrade a single line. Skills that only appear under perks ("AWS training budget") are ignored.
-3. **Implied skills.** MySQL on a CV satisfies an ad that asks for SQL, and NestJS implies Node.js, TypeScript and JavaScript. The evidence shown is the more specific skill's line.
-4. **Templates.** Bullet rewrites, gap advice, cover letter and interview questions come from EN/FR templates (`src/analyzer/templates.ts`). They only use **direct quotes from the CV** or **clearly marked placeholders**.
+1. **Extraction.** `src/analyzer/taxonomy.ts` holds 177 hand-picked skills, one per product, with their spelling variants (`ReactJS`, `Postgres`, `K8s`…) and French synonyms (`travail en équipe`, `tests unitaires`, `intégration continue`…). Matching ignores accents and case, handles tokens like `C++`, `C#`, `.NET`, `Node.js` and `CI/CD`, doesn't confuse `Java` with `JavaScript`, and lets the longer mention win ("GitHub Actions" is the CI tool, not also "GitHub"). All terms are compiled into one longest-first regex.
+2. **Different products stay different.** "Zustand" is not "Redux", "GitLab" is not "Git", "TensorFlow" is not "PyTorch", "real-time" is not "WebSockets". When one product really proves another, that is an explicit, one-way implication (`IMPLIES`): Helm ⇒ Kubernetes, GitHub ⇒ Git, MySQL ⇒ SQL and relational databases, NestJS ⇒ Node.js and TypeScript. The evidence shown is the line of the more specific product.
+3. **Ambiguous words need context.** `Go`, `Rust`, `Express` and `Swift` only count with their capital letter in a list-like context. `Claude`, `Gemini`, `Llama` and `GPT` are case-sensitive and need an AI word on the same line (API, model, LLM, prompt…) or a version (`GPT-4o`, `Llama 3`), so "Claude Martin" is a person, not an LLM. The CV's name line, e-mail addresses and URLs are masked before extraction. Bare `REST` counts (case-sensitive), "rest" does not.
+4. **Section detection.** `src/analyzer/sections.ts` splits the ad into *intro / requirements / nice-to-have / responsibilities / company / perks* using English and French headings ("Profil recherché", "Atouts", "Vos missions"…). Inline markers such as "is a plus" or "serait un plus" are read per clause: in "React is required, TypeScript is a plus" only TypeScript becomes a nice-to-have, while "Docker, Kubernetes and Terraform are a plus" covers the whole list. Skills that only appear under perks ("AWS training budget") are ignored.
+5. **Templates.** Bullet rewrites, gap advice, cover letter and interview questions come from EN/FR templates (`src/analyzer/templates.ts`). They only use **direct quotes from the CV** or **clearly marked placeholders**. A skill the keyword scan did not find is never turned into "I have not used X": the letter says it is an area to keep developing. French letters open with "Madame, Monsieur," and avoid gendered adjectives.
+
+### Golden-set evaluation
+
+`src/analyzer/golden.fixtures.ts` holds 8 hand-labelled CV/ad pairs (five from an external code review, the bundled sample, an AI-engineer pair and a French Angular pair) with the skills a careful recruiter would extract, their importance and whether the CV proves them. Skills the taxonomy doesn't know (Oracle, Istio, a nursing licence…) are labelled too, so recall is honest. `npm test` prints:
+
+```
+case                                     ext P   ext R  import match P match R
+1 Java backend (EN)                     100.0%   92.9%  100.0%  100.0%  100.0%
+2 French full-stack (FR)                100.0%  100.0%  100.0%  100.0%  100.0%
+3 Marketing CV vs DevOps ad             100.0%   84.2%  100.0%  100.0%  100.0%
+4 "required, … is a plus" + Zustand     100.0%  100.0%  100.0%  100.0%  100.0%
+5 Non-tech (nurse) ad                   100.0%   20.0%  100.0%  100.0%  100.0%
+6 Bundled sample                        100.0%  100.0%  100.0%  100.0%  100.0%
+7 AI engineer (RAG, Claude API)         100.0%  100.0%  100.0%  100.0%  100.0%
+8 Angular (FR, inline "est un plus")    100.0%   90.0%  100.0%  100.0%  100.0%
+------------------------------------------------------------------------------
+ALL (micro-average)                     100.0%   91.4%  100.0%  100.0%  100.0%
+(105 labelled skills; recall counts 9 skills outside the taxonomy as misses)
+```
+
+*ext* is skill extraction from the ad, *import* is required vs nice-to-have, and *match* is "the CV proves it". Match precision is the honesty metric and the test requires it to stay at 100%. The set is small and was labelled for this project (not by independent annotators), so treat it as a regression guard rather than a benchmark.
 
 ## Prompt-engineering approach
 
@@ -98,8 +121,9 @@ The prompts live in `src/prompts/`:
 | File | What it does |
 | --- | --- |
 | `system.ts` | System instructions. **Grounding rules come first**, then the output spec, then language and format rules. |
-| `fewshot.ts` | One compact worked example (CV, ad and the full JSON answer). A unit test validates it against the zod schema, so it can't drift from what the app accepts. |
+| `fewshot.ts` | One compact worked example per output language (CV, ad and the full JSON answer, in English and in French). The one matching the requested language is used. Unit tests validate both against the zod schema, so they can't drift from what the app accepts. |
 | `build.ts` | Builds the messages (`system` + few-shot pair + real request), fences the untrusted input, and builds the repair prompt. |
+| `limits.ts` | The 12,000-character input limit, shared with the UI so it can warn before anything is cut. |
 
 **The grounding rule (the most important one):**
 
@@ -113,7 +137,7 @@ In practice this means:
 
 **Structured output, validated and repaired:**
 
-1. The request asks for JSON: Gemini gets `responseMimeType: application/json` plus a `responseJsonSchema` generated from the zod schema (`z.toJSONSchema`), Ollama gets the schema through `format`, and OpenAI-compatible APIs get `response_format: { type: "json_object" }`.
+1. The request asks for JSON: Gemini gets `responseMimeType: application/json` plus a `responseJsonSchema` generated from the zod schema (`z.toJSONSchema`), Ollama gets the schema through `format`, and OpenAI-compatible APIs get `response_format: { type: "json_schema" }` with the same schema. If an endpoint or model rejects that with a 400/422, the app falls back to `json_object` for it.
 2. The reply goes through `extractJson`, which tolerates markdown fences and surrounding prose, and then `AnalysisPayloadSchema.safeParse`.
 3. If validation fails, **one repair call** is made. It replays the bad answer with the exact zod errors (`skills.0.importance: Invalid option…`) and asks for a corrected object. If that fails too, the user sees a clear error instead of half-broken data.
 
@@ -121,14 +145,18 @@ In practice this means:
 
 - **Prompt-injection guard.** The CV and the ad are wrapped in `<cv>` / `<job_ad>` tags, closing tags inside them are neutralised, and the system prompt says their content is data, not instructions.
 - **Pre-scan hint.** The deterministic keyword scan is passed along as a hint labelled "may be incomplete or wrong — verify against the texts". This helps small local models not to miss obvious skills.
-- **Context limits.** Inputs are clipped to 12,000 characters each so requests stay within free-tier limits.
+- **Context limits.** Inputs are clipped to 12,000 characters each so requests stay within free-tier limits. The UI warns before you analyse, and the result keeps a note, when something was cut.
+- **Timeouts and cancel.** Every request is combined with `AbortSignal.timeout(90 s)`; a slow model ends with a readable "timed out" error instead of spinning forever, and the Cancel button aborts the same request.
+- **Versioned prompts.** `PROMPT_VERSION` is stored on every LLM result (shown in the provider badge tooltip), so an old analysis in the history can be traced to the prompt that produced it.
 
 ## Privacy
 
 - **There is no JobFit server.** The app is static files on GitHub Pages.
 - **Offline mode sends nothing anywhere.** Your CV and the ad stay in your browser.
 - With an AI provider, the CV and the ad are sent **only to the provider you pick** (Google, your local Ollama, or the base URL you enter).
-- **API keys are stored only in this browser's `localStorage`** and are sent only to that provider. Gemini keys go in the `x-goog-api-key` header, never in the URL. Settings has a **Forget keys** button, which is worth using on a shared computer.
+- **API keys are kept in `sessionStorage` by default**, so they are gone when you close the browser. Tick *Remember API keys on this device* to keep them in `localStorage` instead. Keys are sent only to the provider you pick; Gemini keys go in the `x-goog-api-key` header, never in the URL. Settings has a **Forget keys** button, which is worth using on a shared computer.
+- **Content Security Policy.** The built page carries a CSP that only allows network requests to itself, the known LLM providers (Google, Groq, OpenRouter, OpenAI, Mistral, Together, DeepSeek) and `localhost` for Ollama or LM Studio. Scripts must come from the site itself (the one inline script is allowed by its hash). An OpenAI-compatible endpoint on another host is blocked by the browser; add it to `CONNECT_SRC` in `src/lib/csp.ts` if you self-host.
+- **No third-party requests.** Fonts (Inter and Space Grotesk) are bundled with the app instead of loaded from Google Fonts, so opening the page doesn't contact anyone else.
 - History and drafts are also kept in `localStorage` and can be cleared from the History dialog.
 - Calling an LLM API directly from the browser means the key sits in the browser. That is fine for a personal key on your own machine, but don't paste a key you share with others.
 
@@ -160,40 +188,46 @@ Click **Try the sample CV + job ad**, then **Analyse match**.
 ## Tests
 
 ```bash
-npm test           # Vitest: 97 tests in 9 files
+npm test           # Vitest: 176 tests in 14 files (prints the golden-set table)
 npm run build      # tsc --noEmit (strict) + vite build
 ```
 
 What the tests cover:
 
-- **Extraction** (`extract.test.ts`): special-character tokens, Java vs JavaScript, aliases, French synonyms, ambiguous words, evidence snippets.
-- **Section detection** (`sections.test.ts`): English and French headings, key/value lines, inline "is a plus" markers, ignored perks, strongest importance wins.
+- **Extraction** (`extract.test.ts`): special-character tokens, Java vs JavaScript, spelling variants, French synonyms, ambiguous words, different products kept apart (Zustand/Redux, GitLab/Git, TensorFlow/PyTorch…), one-way implications, LLM names needing context, the CV header being ignored, bare "REST", evidence snippets.
+- **Section detection** (`sections.test.ts`): English and French headings, key/value lines, inline "is a plus" markers read per clause ("React is required, TypeScript is a plus"), ignored perks, strongest importance wins.
 - **Scoring** (`score.test.ts`): weights, bands, category breakdown.
 - **Facts** (`facts.test.ts`): years of experience from explicit text or date ranges (education excluded), job title and company, CV name, bullets and projects.
-- **Offline analyzer** (`offline.test.ts`): end-to-end on the sample. The output passes the LLM schema, every evidence quote exists in the CV, the cover letter never claims missing skills, metrics are placeholders, and French output and French ads work.
+- **Offline analyzer** (`offline.test.ts`): end-to-end on the sample. The output passes the LLM schema, every evidence quote exists in the CV, the cover letter never claims missing skills nor says "I have not used X", metrics are placeholders, and French output and French ads work. Regression tests check that "GitLab CI", "Zustand", "TensorFlow" and "Java 17" bullets are never rewritten into another product or version, and that the summary never contradicts itself.
+- **Golden set** (`golden.test.ts`): precision/recall on 8 labelled pairs, with 100% "CV proves it" precision required.
 - **Grounding checks** (`finalize.test.ts`): invented evidence is flagged and earns no points.
 - **zod schemas** (`analysis.test.ts`): the few-shot example is valid, bad shapes are rejected, and the JSON Schema export is checked.
 - **Prompt builders** (`prompts.test.ts`): grounding rule, language, fencing and injection guard, clipping, repair prompt.
-- **Provider pipeline** (`run.test.ts`): JSON extraction, validate → repair → give up, offline mode makes no network call, and the Gemini request shape (key in a header, roles mapped, JSON mode on), with `fetch` mocked.
+- **Provider pipeline** (`run.test.ts`): JSON extraction, validate → repair → give up, offline mode makes no network call, the Gemini request shape (key in a header, roles mapped, JSON mode on), the 90 s timeout and user cancel, and the OpenAI-compatible `json_schema` → `json_object` fallback, with `fetch` mocked.
+- **Storage** (`storage.test.ts`, jsdom): history round-trip, invalid and corrupted entries dropped, v1 migration, API keys in sessionStorage unless "remember" is on.
+- **CSP** (`csp.test.ts`): provider hosts and localhost allowed, other hosts not, the inline script hashed, no Google Fonts.
+- **Components** (`App.test.tsx`, `Results.test.tsx`, jsdom + Testing Library): the analyse flow, the minimum-length hint, provider errors in the alert, a missing key caught before any request, Cancel and abort on unmount, the truncation warning, tabs keyboard navigation, the "claimed, not found in CV" chips and the coverage note.
 
 ## Project structure
 
 ```
 src/
 ├── analyzer/          # deterministic engine (offline mode + scoring for all modes)
-│   ├── taxonomy.ts    # 107 skills, aliases, French synonyms, implications
-│   ├── extract.ts     # accent-insensitive token matching, evidence snippets
-│   ├── sections.ts    # required / nice-to-have / responsibilities / perks detection
+│   ├── taxonomy.ts    # 177 skills, variants, French synonyms, one-way implications
+│   ├── extract.ts     # accent-insensitive token matching, CV header masking, evidence snippets
+│   ├── sections.ts    # required / nice-to-have / responsibilities / perks, per-clause markers
 │   ├── facts.ts       # name, bullets, projects, years; job title, company, min years
 │   ├── score.ts       # weighted score, category breakdown, bands
 │   ├── templates.ts   # EN/FR strings, weak-verb table, interview question bank
 │   ├── offline.ts     # analyzeOffline(): builds the AnalysisPayload
-│   └── finalize.ts    # dedupe, evidence verification, score → AnalysisResult
-├── prompts/           # system.ts · fewshot.ts · build.ts (messages, fencing, repair)
-├── providers/         # gemini.ts · ollama.ts · openaiCompat.ts · http.ts · run.ts (validate + repair)
-├── schemas/           # analysis.ts: zod schema + JSON Schema export
+│   ├── runOffline.ts  # offline path in one call (no zod, no providers)
+│   ├── finalize.ts    # dedupe, evidence verification, score → AnalysisResult
+│   └── golden.*.ts    # labelled evaluation set + precision/recall test
+├── prompts/           # system.ts · fewshot.ts (EN + FR) · build.ts · limits.ts
+├── providers/         # gemini.ts · ollama.ts · openaiCompat.ts · http.ts (timeout) · run.ts (validate + repair, lazy-loaded)
+├── schemas/           # analysis.ts: zod schema + JSON Schema export · categories.ts (zod-free)
 ├── components/        # Results, ScoreGauge, SettingsDialog, HistoryDialog, Dialog, Icons
-├── lib/               # pdf.ts (pdf.js), storage.ts (localStorage), download.ts
+├── lib/               # pdf.ts (pdf.js), storage.ts + historySchema.ts, csp.ts, download.ts
 ├── data/samples.ts    # fictional sample CV + job ad
 ├── App.tsx · main.tsx · styles.css
 .github/workflows/     # ci.yml (test + build) · deploy.yml (GitHub Pages)
@@ -202,12 +236,13 @@ docs/screenshots/
 
 ## Tech stack
 
-React 18 · TypeScript (strict) · Vite · zod · pdf.js (`pdfjs-dist`) · Vitest · plain CSS with design tokens (dark and light themes) · GitHub Actions and GitHub Pages.
+React 18 · TypeScript (strict) · Vite · zod (lazy-loaded) · pdf.js (`pdfjs-dist`) · Vitest · jsdom + Testing Library · self-hosted fonts (Fontsource) · plain CSS with design tokens (dark and light themes) · GitHub Actions and GitHub Pages.
 LLM providers: Google Gemini (Generative Language REST API), Ollama, and any OpenAI-compatible Chat Completions API.
 
 ## Limitations
 
-- Offline mode is keyword-based. It only knows the skills in the taxonomy, and its cover letter is a template built from your own CV lines. A connected LLM writes more natural text.
+- Offline mode is keyword-based. It only knows the skills in the taxonomy (the results say how many it recognised in each ad), and its cover letter is a template built from your own CV lines. A connected LLM writes more natural text.
+- "X or Y" requirements are counted as two skills, so a CV with only one of them shows the other as missing.
 - The Gemini, Ollama and OpenAI-compatible paths are covered by mocked tests, but real responses depend on the model you choose. Small local models may need the repair step more often.
 - PDF import reads text-based PDFs. Scanned (image-only) CVs need to be pasted as text.
 
