@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { extractSkills, normalize, snippetAt } from './extract';
+import { cvSkillMap, extractSkills, isSpellingOf, maskPersonalInfo, normalize, snippetAt } from './extract';
 
 const ids = (text: string) => extractSkills(text).map((s) => s.def.id);
+
+const NL = String.fromCharCode(10);
 
 describe('normalize', () => {
   it('lower-cases, strips accents and unifies quotes/dashes', () => {
@@ -53,6 +55,92 @@ describe('extractSkills', () => {
     expect(res.map((r) => r.def.id)).toEqual(['docker', 'react']);
     expect(res[0]!.hits).toHaveLength(2);
     expect(res[0]!.hits[0]!.surface).toBe('Docker');
+  });
+});
+
+describe('different products stay different skills', () => {
+  it.each([
+    ['Built the store with Zustand', ['zustand'], ['redux']],
+    ['Trained models with TensorFlow and Keras', ['tensorflow', 'keras'], ['pytorch']],
+    ['Deployed through GitLab CI', ['gitlab-ci'], ['git', 'gitlab', 'cicd']],
+    ['Code hosted on GitHub and Bitbucket', ['github', 'bitbucket'], ['git']],
+    ['Wrote Helm charts', ['helm'], ['kubernetes']],
+    ['Designed real-time KPI reports (temps réel)', [], ['websockets']],
+    ['Tickets in Confluence and Trello', ['confluence', 'trello'], ['jira']],
+    ['Documented the API with Swagger', ['openapi'], ['postman']],
+    ['Monorepo with yarn and pnpm', ['yarn', 'pnpm'], ['npm']],
+    ['Centralised logging for the API', [], ['monitoring']],
+    ['Deployed on Firebase Hosting', ['firebase'], ['gcp']],
+    ['Jest and Cypress tests', ['jest', 'cypress', 'testing'].slice(0, 2), ['playwright']],
+  ])('%s', (text, present, absent) => {
+    const found = ids(text);
+    expect(found).toEqual(expect.arrayContaining(present));
+    for (const a of absent) expect(found).not.toContain(a);
+  });
+
+  it('keeps true implications on the CV side only (Helm ⇒ Kubernetes, not the reverse)', () => {
+    expect([...cvSkillMap('- Wrote Helm charts').keys()]).toContain('kubernetes');
+    expect([...cvSkillMap('- Ran Kubernetes clusters').keys()]).not.toContain('helm');
+    expect([...cvSkillMap('- Built the store with Zustand').keys()]).not.toContain('redux');
+    expect([...cvSkillMap('- Code on GitHub').keys()]).toContain('git');
+  });
+
+  it('lets the longer mention win when two skills overlap', () => {
+    const found = ids('CI/CD with GitHub Actions; mobile app in React Native');
+    expect(found).toEqual(expect.arrayContaining(['cicd', 'github-actions', 'react-native']));
+    expect(found).not.toContain('github');
+    expect(found).not.toContain('react');
+  });
+});
+
+describe('ambiguous LLM names', () => {
+  it('does not read people or star signs as models', () => {
+    expect(ids('Claude Martin' + NL + 'Marketing analyst')).toEqual([]);
+    expect(ids('Worked with Claude and Gemini on the design team')).toEqual([]);
+    expect(ids('Meeting notes for Llama Farms Ltd')).toEqual([]);
+  });
+
+  it('accepts them with a technical context or a version', () => {
+    expect(ids('Built a support chatbot with the Claude API')).toContain('claude');
+    expect(ids('Fine-tuned Llama 3 on support tickets')).toContain('llama');
+    expect(ids('Prompting GPT-4o and Gemini models via the API')).toEqual(expect.arrayContaining(['openai', 'gemini']));
+    expect(ids('Worked with GPT for summaries')).not.toContain('openai');
+  });
+
+  it('is case-sensitive', () => {
+    expect(ids('claude and gemini are my cats, they love llama toys')).toEqual([]);
+  });
+});
+
+describe('CV header', () => {
+  const cv = ['Claude Martin', 'claude.martin@example.com · github.com/claude-go · www.gemini-portfolio.dev', 'EXPERIENCE', '- Built REST APIs with Socket.io'].join(NL);
+  it('masks the name, e-mails and URLs but keeps the length', () => {
+    const masked = maskPersonalInfo(cv);
+    expect(masked).toHaveLength(cv.length);
+    expect(masked).not.toMatch(/Claude|github|gemini/i);
+    expect(masked).toContain('Socket.io');
+  });
+  it('never turns the header into skills', () => {
+    const found = [...cvSkillMap(cv).keys()];
+    expect(found).toEqual(expect.arrayContaining(['rest', 'socketio']));
+    for (const id of ['claude', 'llm', 'github', 'git', 'go', 'gemini']) expect(found).not.toContain(id);
+  });
+});
+
+describe('REST', () => {
+  it('recognises bare "REST" (case-sensitive) and not the word "rest"', () => {
+    expect(ids('Java, Spring Boot, Hibernate/JPA, PostgreSQL, REST')).toContain('rest');
+    expect(ids('REST and GraphQL APIs')).toContain('rest');
+    expect(ids('Take some rest after the release')).not.toContain('rest');
+  });
+});
+
+describe('isSpellingOf', () => {
+  it('knows spelling variants apart from aliases', () => {
+    expect(isSpellingOf('react', 'ReactJS')).toBe(true);
+    expect(isSpellingOf('react', 'React.js')).toBe(true);
+    expect(isSpellingOf('java', 'Java 17')).toBe(false);
+    expect(isSpellingOf('git', 'GitLab')).toBe(false);
   });
 });
 

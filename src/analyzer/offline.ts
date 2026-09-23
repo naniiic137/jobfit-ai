@@ -1,10 +1,9 @@
 import type { AnalysisPayload, BulletSuggestion, Importance, InterviewQuestion, SkillAssessment } from '../schemas/analysis';
 import type { OutputLanguage } from '../types';
-import { bestEvidenceIndex, extractSkills, lineAt, normalize, snippetAt, type ExtractedSkill } from './extract';
+import { bestEvidenceIndex, cvSkillMap, extractSkills, lineAt, normalize, snippetAt, type ExtractedSkill } from './extract';
 import { cvFacts, jobFacts, type CvFacts, type JobFacts } from './facts';
 import { computeScore, scoreBand, skillWeight } from './score';
 import { detectSections, importanceFor, sectionAt } from './sections';
-import { IMPLIES, TAXONOMY_BY_ID } from './taxonomy';
 import type { SkillCategory } from '../schemas/analysis';
 import { COVER, QUESTION_BANK, SOFT_QUESTIONS, WEAK_OPENINGS, formatYears, listJoin, t } from './templates';
 
@@ -62,27 +61,7 @@ export interface OfflineContext {
   jobFacts: JobFacts;
 }
 
-/**
- * Skills found in the CV, plus skills they imply (MySQL ⇒ SQL). An implied
- * skill reuses the hits of the skill that proves it, so its evidence quote is real.
- */
-export function cvSkillMap(cv: string): Map<string, ExtractedSkill> {
-  const map = new Map(extractSkills(cv).map((s) => [s.def.id, s]));
-  // Follow implications transitively (NestJS ⇒ TypeScript ⇒ JavaScript).
-  const queue = [...map.keys()];
-  while (queue.length) {
-    const id = queue.shift()!;
-    const ex = map.get(id)!;
-    for (const impliedId of IMPLIES[id] ?? []) {
-      const def = TAXONOMY_BY_ID.get(impliedId);
-      if (def && !map.has(impliedId)) {
-        map.set(impliedId, { def, hits: ex.hits });
-        queue.push(impliedId);
-      }
-    }
-  }
-  return map;
-}
+export { cvSkillMap };
 
 export function buildContext(cv: string, job: string, lang: OutputLanguage, now = new Date()): OfflineContext {
   return {

@@ -1,5 +1,5 @@
 import type { OutputLanguage } from '../types';
-import { SKILL_CATEGORIES } from '../schemas/analysis';
+import { SKILL_CATEGORIES } from '../schemas/categories';
 
 export const PROMPT_VERSION = '1.0.0';
 

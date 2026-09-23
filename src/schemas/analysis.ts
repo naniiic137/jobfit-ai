@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { IMPORTANCES, SKILL_CATEGORIES } from './categories';
 
 /**
  * The single contract every provider must satisfy.
@@ -11,23 +12,12 @@ import { z } from 'zod';
  * consistent and explainable no matter which provider produced the labels.
  */
 
-export const SKILL_CATEGORIES = [
-  'language',
-  'frontend',
-  'backend',
-  'database',
-  'devops',
-  'ai',
-  'tool',
-  'practice',
-  'soft',
-  'other',
-] as const;
+export { SKILL_CATEGORIES, IMPORTANCES } from './categories';
 
 export const SkillCategorySchema = z.enum(SKILL_CATEGORIES);
 export type SkillCategory = z.infer<typeof SkillCategorySchema>;
 
-export const ImportanceSchema = z.enum(['required', 'nice']);
+export const ImportanceSchema = z.enum(IMPORTANCES);
 export type Importance = z.infer<typeof ImportanceSchema>;
 
 export const SkillAssessmentSchema = z.object({

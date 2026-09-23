@@ -1,4 +1,4 @@
-import { normalize } from './extract';
+import { looksLikeName, normalize } from './extract';
 
 const BULLET_RE = /^\s*([-*•·▪◦►]|\d+[.)])\s+/;
 
@@ -20,7 +20,7 @@ export interface JobFacts {
 export function cvFacts(cv: string, now = new Date()): CvFacts {
   const lines = cv.split('\n').map((l) => l.trim()).filter(Boolean);
   const first = lines[0] ?? '';
-  const name = /^[\p{Lu}][\p{L}'-]+(\s+[\p{L}'-]+){1,3}$/u.test(first) && first.length <= 40 ? first : null;
+  const name = looksLikeName(first) ? first : null;
 
   const bullets = lines.filter((l) => BULLET_RE.test(l)).map((l) => l.replace(BULLET_RE, '').trim()).filter((l) => l.length >= 25);
 

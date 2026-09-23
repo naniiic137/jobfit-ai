@@ -1,6 +1,6 @@
 import type { AnalysisPayload } from '../schemas/analysis';
 import type { AnalysisResult, OutputLanguage, ProviderId, VerifiedSkill } from '../types';
-import { extractSkills, normalize } from './extract';
+import { cvSkillMap, extractSkills, normalize } from './extract';
 import { computeBreakdown, computeScore } from './score';
 
 function squash(s: string): string {
@@ -18,11 +18,11 @@ export function evidenceInCv(evidence: string, cv: string): boolean {
 }
 
 export function verifySkills(skills: AnalysisPayload['skills'], cv: string): VerifiedSkill[] {
-  const cvIds = new Set(extractSkills(cv).map((s) => s.def.id));
+  const cvIds = new Set(cvSkillMap(cv).keys());
   return skills.map((s) => {
     if (!s.inCv) return { ...s, verified: true };
     const byQuote = s.evidence ? evidenceInCv(s.evidence, cv) : false;
-    const byTaxonomy = extractSkills(s.name).some((e) => cvIds.has(e.def.id));
+    const byTaxonomy = extractSkills(s.name, { loose: true }).some((e) => cvIds.has(e.def.id));
     return { ...s, verified: byQuote || byTaxonomy };
   });
 }

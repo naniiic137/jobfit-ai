@@ -8,6 +8,8 @@ const CV = `Nour Mansour
 
 const skill = (p: Partial<SkillAssessment>): SkillAssessment => ({ name: 'React', category: 'frontend', importance: 'required', inCv: true, evidence: null, ...p });
 
+const NL = String.fromCharCode(10);
+
 describe('evidenceInCv', () => {
   it('accepts verbatim quotes, ignoring case, quotes and whitespace', () => {
     expect(evidenceInCv('built a "click & collect" feature in react', CV)).toBe(true);
@@ -28,6 +30,12 @@ describe('verifySkills', () => {
   it('trusts the taxonomy when the quote is missing but the skill is in the CV', () => {
     const [sql] = verifySkills([skill({ name: 'SQL', category: 'database', evidence: null })], CV);
     expect(sql!.verified).toBe(true);
+  });
+  it('matches short LLM skill names loosely but ignores the CV header', () => {
+    const cv = ['Claude Martin', '- Built CLI tools in Python, Go and Bash'].join(NL);
+    const [go, claude] = verifySkills([skill({ name: 'Go', category: 'language' }), skill({ name: 'Claude', category: 'ai' })], cv);
+    expect(go!.verified).toBe(true);
+    expect(claude!.verified).toBe(false);
   });
   it('treats missing skills as verified (nothing to prove)', () => {
     const [x] = verifySkills([skill({ name: 'Kubernetes', inCv: false })], CV);

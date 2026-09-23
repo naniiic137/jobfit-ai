@@ -1,6 +1,6 @@
 import type { SkillAssessment } from '../schemas/analysis';
 import type { CategoryBreakdown, ScoreDetails } from '../types';
-import { SKILL_CATEGORIES } from '../schemas/analysis';
+import { SKILL_CATEGORIES } from '../schemas/categories';
 
 export const WEIGHTS = {
   required: 3,

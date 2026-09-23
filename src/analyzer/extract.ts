@@ -1,4 +1,4 @@
-import { TAXONOMY, type SkillDef } from './taxonomy';
+import { IMPLIES, TAXONOMY, TAXONOMY_BY_ID, type SkillDef } from './taxonomy';
 
 /** Lower-case, strip accents, unify quotes/dashes. Length is preserved per char where possible. */
 export function normalize(text: string): string {
@@ -23,32 +23,56 @@ function escapeRegex(s: string): string {
  * - Not preceded by a letter/digit/+/#/@ or a dot that is glued to a word (".net" in "asp.net").
  * - Not followed by a letter/digit/+/# (so "Java" does not match "JavaScript"),
  *   nor by ".x" (so "node" does not match "node.js" twice), but a sentence-final "." is fine.
+ * - `versioned` terms may be followed by "-4o" / ".5" / " 3" ("GPT-4o", "Llama 3.1").
  */
-function termRegex(term: string, flags: string): RegExp {
+function termRegex(term: string, flags: string, versioned = false): RegExp {
   const body = escapeRegex(term).replace(/\\?\s+/g, '[\\s-]+');
-  return new RegExp(`(?<![\\p{L}\\p{N}+#@_.])${body}(?![\\p{L}\\p{N}+#_]|[.\\-/][\\p{L}\\p{N}])`, flags);
+  const after = versioned ? '(?![\\p{L}\\p{N}+#_]|[.\\-/]\\p{L})' : '(?![\\p{L}\\p{N}+#_]|[.\\-/][\\p{L}\\p{N}])';
+  return new RegExp(`(?<![\\p{L}\\p{N}+#@_.])${body}${after}`, flags);
 }
 
 interface CompiledSkill {
   def: SkillDef;
   insensitive: RegExp[];
-  sensitive: RegExp[];
+  sensitive: Array<{ re: RegExp; acronym: boolean }>;
 }
 
 let compiled: CompiledSkill[] | null = null;
+const variantSets = new Map<string, Set<string>>();
 
 function compile(): CompiledSkill[] {
   if (compiled) return compiled;
   compiled = TAXONOMY.map((def) => {
-    const terms = new Set<string>((def.aliases ?? []).map((a) => normalize(a)));
+    const terms = new Set<string>([...(def.aliases ?? []), ...(def.variants ?? [])].map((a) => normalize(a)));
     if (!def.labelIsAmbiguous) terms.add(normalize(def.label));
     return {
       def,
       insensitive: [...terms].map((t) => termRegex(t, 'gu')),
-      sensitive: (def.caseSensitive ?? []).map((t) => termRegex(t, 'gu')),
+      sensitive: (def.caseSensitive ?? []).map((t) => ({ re: termRegex(t, 'gu', def.versioned), acronym: /^[A-Z]{3,}$/.test(t) })),
     };
   });
   return compiled;
+}
+
+/**
+ * Normalized spellings that are pure variants of a skill's name (its label and
+ * `variants`, never its aliases). Rewriting one of these into another is only
+ * a spelling change; rewriting anything else could change the product.
+ */
+export function spellingsOf(id: string): ReadonlySet<string> {
+  let set = variantSets.get(id);
+  if (!set) {
+    const def = TAXONOMY_BY_ID.get(id);
+    const collapse = (s: string) => normalize(s).replace(/[\s-]+/g, ' ');
+    set = new Set(def ? [def.label, ...(def.variants ?? [])].map(collapse) : []);
+    variantSets.set(id, set);
+  }
+  return set;
+}
+
+/** True when `surface` is just a spelling of skill `id` ("ReactJS" for React), not an alias ("Java 17"). */
+export function isSpellingOf(id: string, surface: string): boolean {
+  return spellingsOf(id).has(normalize(surface).replace(/[\s-]+/g, ' '));
 }
 
 export interface SkillHit {
@@ -64,36 +88,58 @@ export interface ExtractedSkill {
   hits: SkillHit[];
 }
 
+export interface ExtractOptions {
+  /**
+   * Skip the context checks for ambiguous words. Use it for short labels such
+   * as a skill name returned by an LLM ("Go", "Claude"), never for free text.
+   */
+  loose?: boolean;
+}
+
 /**
  * Find every taxonomy skill mentioned in `text`.
  * Returns one entry per skill (in first-mention order) with all its hits.
+ * When two skills overlap, the longer mention wins: "GitHub Actions" is the
+ * CI/CD tool, not also "GitHub"; "React Native" is not also "React".
  */
-export function extractSkills(text: string): ExtractedSkill[] {
+export function extractSkills(text: string, opts: ExtractOptions = {}): ExtractedSkill[] {
   const original = stripAccents(text).replace(/[–—]/g, '-');
   const lower = normalize(text);
-  const found = new Map<string, ExtractedSkill>();
+  const all: Array<SkillHit & { def: SkillDef; end: number }> = [];
 
   for (const c of compile()) {
-    const hits: SkillHit[] = [];
     for (const re of c.insensitive) {
       re.lastIndex = 0;
       for (const m of lower.matchAll(re)) {
-        hits.push({ id: c.def.id, index: m.index, surface: original.slice(m.index, m.index + m[0].length) });
+        all.push({ id: c.def.id, def: c.def, index: m.index, end: m.index + m[0].length, surface: original.slice(m.index, m.index + m[0].length) });
       }
     }
-    for (const re of c.sensitive) {
+    for (const { re, acronym } of c.sensitive) {
       for (const m of original.matchAll(re)) {
-        // "Go" at the start of a sentence is almost always the verb; require a tech-ish neighbour.
-        if (!looksTechnical(original, m.index, m[0].length)) continue;
-        hits.push({ id: c.def.id, index: m.index, surface: m[0] });
+        if (!opts.loose) {
+          if (c.def.context) {
+            if (!hasContext(original, m.index, m[0].length, c.def.context)) continue;
+          } else if (!acronym && !looksTechnical(original, m.index, m[0].length)) {
+            // "Go" at the start of a sentence is almost always the verb; require a tech-ish neighbour.
+            continue;
+          }
+        }
+        all.push({ id: c.def.id, def: c.def, index: m.index, end: m.index + m[0].length, surface: m[0] });
       }
-    }
-    if (hits.length) {
-      hits.sort((a, b) => a.index - b.index);
-      found.set(c.def.id, { def: c.def, hits });
     }
   }
 
+  const kept = all.filter(
+    (h) => !all.some((o) => o.id !== h.id && o.index <= h.index && o.end >= h.end && o.end - o.index > h.end - h.index),
+  );
+
+  const found = new Map<string, ExtractedSkill>();
+  for (const h of kept) {
+    const entry = found.get(h.id) ?? { def: h.def, hits: [] };
+    entry.hits.push({ id: h.id, index: h.index, surface: h.surface });
+    found.set(h.id, entry);
+  }
+  for (const e of found.values()) e.hits.sort((a, b) => a.index - b.index);
   return [...found.values()].sort((a, b) => a.hits[0]!.index - b.hits[0]!.index);
 }
 
@@ -104,6 +150,20 @@ function looksTechnical(text: string, index: number, length: number): boolean {
   const sentenceStart = /(^|[.!?]\s+|\n\s*)$/.test(text.slice(Math.max(0, index - 4), index));
   const listy = /[,/(:|•·]\s*$/.test(before) || /^\s*[,/)|]/.test(after) || /^\s*(and|et|or|ou)\s/i.test(after);
   return listy || !sentenceStart;
+}
+
+/**
+ * Names such as "Claude" or "Gemini" only count when the same line talks about
+ * AI (API, model, LLM…) or the name carries a version ("GPT-4o", "Llama 3").
+ */
+function hasContext(text: string, index: number, length: number, context: RegExp): boolean {
+  if (/^[\s-]?\d/.test(text.slice(index + length, index + length + 2))) return true;
+  const start = text.lastIndexOf('\n', index - 1) + 1;
+  const endIdx = text.indexOf('\n', index);
+  const line = text.slice(start, endIdx === -1 ? text.length : endIdx);
+  const rel = index - start;
+  const rest = `${line.slice(0, rel)} ${line.slice(rel + length)}`;
+  return context.test(rest);
 }
 
 /** Return the full line of `text` that contains character `index`. */
@@ -133,4 +193,59 @@ export function snippetAt(text: string, index: number, max = 110): string {
 export function bestEvidenceIndex(text: string, hits: SkillHit[]): number {
   const bulletHit = hits.find((h) => /^[-*•·▪◦]\s/.test(lineAt(text, h.index)));
   return (bulletHit ?? hits[0]!).index;
+}
+
+/** "Amel Karray", "Jean-Luc Picard": 2–4 capitalised words, nothing else. */
+export function looksLikeName(line: string): boolean {
+  const l = line.trim();
+  return l.length <= 40 && /^[\p{Lu}][\p{L}'-]+(\s+[\p{L}'-]+){1,3}$/u.test(l);
+}
+
+const EMAIL_RE = /[\p{L}\p{N}._%+-]+@[\p{L}\p{N}-]+(?:\.[\p{L}\p{N}-]+)+/gu;
+// Bare domains need a common TLD. "socket.io" and "character.ai" are tech
+// names, so .io/.ai only count with a path, a scheme or "www.".
+const URL_RE =
+  /\b(?:https?:\/\/|www\.)[^\s,;·|]+|\b(?:[\p{L}\p{N}-]+\.)+(?:com|org|net|dev|me|app|fr|tn|co|be|ca|de|uk|info|page)\b(?:\/[^\s,;·|]*)?|\b(?:[\p{L}\p{N}-]+\.)+(?:io|ai)\/[^\s,;·|]*/giu;
+
+/**
+ * Blank out the parts of a CV that are about the person, not their skills:
+ * the name line at the top, e-mail addresses and URLs ("github.com/claude-dev").
+ * Replaced with spaces so every index still maps to the original text.
+ */
+export function maskPersonalInfo(cv: string): string {
+  const blank = (s: string) => s.replace(/[^\n]/g, ' ');
+  let out = cv.replace(EMAIL_RE, blank).replace(URL_RE, blank);
+  const firstLine = out.match(/^\s*([^\n]*)/);
+  if (firstLine && looksLikeName(firstLine[1]!)) {
+    const start = firstLine[0].length - firstLine[1]!.length;
+    out = out.slice(0, start) + blank(firstLine[1]!) + out.slice(start + firstLine[1]!.length);
+  }
+  return out;
+}
+
+/** Skills of a CV, ignoring its header (name, e-mail, links). */
+export function extractCvSkills(cv: string): ExtractedSkill[] {
+  return extractSkills(maskPersonalInfo(cv));
+}
+
+/**
+ * Skills found in the CV, plus skills they imply (MySQL ⇒ SQL). An implied
+ * skill reuses the hits of the skill that proves it, so its evidence quote is real.
+ */
+export function cvSkillMap(cv: string): Map<string, ExtractedSkill> {
+  const map = new Map(extractCvSkills(cv).map((s) => [s.def.id, s]));
+  // Follow implications transitively (NestJS ⇒ TypeScript ⇒ JavaScript).
+  const queue = [...map.keys()];
+  while (queue.length) {
+    const id = queue.shift()!;
+    const ex = map.get(id)!;
+    for (const impliedId of IMPLIES[id] ?? []) {
+      const def = TAXONOMY_BY_ID.get(impliedId);
+      if (def && !map.has(impliedId)) {
+        map.set(impliedId, { def, hits: ex.hits });
+        queue.push(impliedId);
+      }
+    }
+  }
+  return map;
 }
