@@ -2,7 +2,7 @@ import { useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'rea
 import type { SkillCategory } from '../schemas/analysis';
 import type { AnalysisResult, VerifiedSkill } from '../types';
 import { copyText, coverLetterMarkdown, downloadText, slug } from '../lib/download';
-import { skillWeight } from '../analyzer/score';
+import { LOW_COVERAGE, skillWeight } from '../analyzer/score';
 import { ScoreGauge } from './ScoreGauge';
 import {
   IconAlert,
@@ -47,8 +47,12 @@ export function Results({ result, initialTab = 'bullets' }: { result: AnalysisRe
   const baseId = useId();
   const d = result.scoreDetails;
   const bySkillWeight = (a: VerifiedSkill, b: VerifiedSkill) => skillWeight(b) - skillWeight(a);
-  const matched = result.skills.filter((s) => s.inCv).sort(bySkillWeight);
+  const matched = result.skills.filter((s) => s.inCv && s.verified).sort(bySkillWeight);
+  // An LLM said "in your CV" but its quote is not in the CV: shown apart, never scored.
+  const claimed = result.skills.filter((s) => s.inCv && !s.verified).sort(bySkillWeight);
   const missing = result.skills.filter((s) => !s.inCv).sort(bySkillWeight);
+  const recognised = result.skills.length;
+  const lowCoverage = recognised < LOW_COVERAGE;
 
   const onTabKey = (e: KeyboardEvent<HTMLButtonElement>, i: number) => {
     if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
@@ -98,10 +102,19 @@ export function Results({ result, initialTab = 'bullets' }: { result: AnalysisRe
               <div>
                 <dt>Missing</dt>
                 <dd>
-                  <strong>{missing.length}</strong>
+                  <strong>{missing.length + claimed.length}</strong>
                 </dd>
               </div>
             </dl>
+            <p className={`coverage${lowCoverage ? ' coverage--low' : ''}`} role="note">
+              {result.provider === 'offline'
+                ? `Recognised ${recognised} skill${recognised === 1 ? '' : 's'} in this ad; others aren't scored.`
+                : `The model listed ${recognised} skill${recognised === 1 ? '' : 's'} from this ad.`}
+              {lowCoverage &&
+                (result.provider === 'offline'
+                  ? ' That is too few for a reliable score: the offline list only knows common software skills. Try an LLM provider for this ad.'
+                  : ' That is too few for a reliable score.')}
+            </p>
             <p className="score__how">
               Scored by the app, not the model: required skills weigh 3×, nice-to-haves 1×, soft skills half. Hover a green chip to see the CV line
               that proves it.
@@ -136,15 +149,35 @@ export function Results({ result, initialTab = 'bullets' }: { result: AnalysisRe
             </h3>
             <ul className="chips" aria-label="Matched skills">
               {matched.map((s) => (
-                <li key={s.name} className={`chip chip--ok${s.verified ? '' : ' chip--unverified'}`} title={s.evidence ? `From your CV: “${s.evidence}”` : undefined}>
+                <li key={s.name} className="chip chip--ok" title={s.evidence ? `From your CV: “${s.evidence}”` : undefined}>
                   <IconCheck width={14} height={14} />
                   {s.name}
                   {s.importance === 'nice' && <span className="chip__tag">nice</span>}
-                  {!s.verified && <span className="chip__tag chip__tag--warn">unverified</span>}
                 </li>
               ))}
               {!matched.length && <li className="muted">No overlap found yet.</li>}
             </ul>
+            {claimed.length > 0 && (
+              <>
+                <h4 className="skills__sub">
+                  Claimed by the model, not found in your CV <span className="count">{claimed.length}</span>
+                </h4>
+                <p className="muted small">Its quote is not in your CV text, so these earn no points. Add them to your CV only if they are true.</p>
+                <ul className="chips" aria-label="Claimed by the model but not found in your CV">
+                  {claimed.map((s) => (
+                    <li
+                      key={s.name}
+                      className="chip chip--claimed"
+                      title={s.evidence ? `The model quoted: “${s.evidence}” (not found in your CV)` : 'The model gave no quote from your CV'}
+                    >
+                      <IconAlert width={14} height={14} />
+                      {s.name}
+                      <span className="chip__tag chip__tag--warn">claimed, not found in CV</span>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
           </div>
           <div className="skills__col">
             <h3 className="card__title">
