@@ -17,40 +17,65 @@ function escapeRegex(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+const BEFORE = String.raw`(?<![\p{L}\p{N}+#@_.])`;
+const AFTER = String.raw`(?![\p{L}\p{N}+#_]|[.\-/][\p{L}\p{N}])`;
+/** Versioned names may be followed by "-4o" / ".5" / " 3" ("GPT-4o", "Llama 3.1"). */
+const AFTER_VERSIONED = String.raw`(?![\p{L}\p{N}+#_]|[.\-/]\p{L})`;
+
+/** Regex source for one term; spaces also match hyphens ("full stack" ~ "full-stack"). */
+function termBody(term: string): string {
+  return escapeRegex(term).replace(/\s+/g, String.raw`[\s-]+`);
+}
+
+/** The key used to map a matched surface back to its term. */
+function collapse(s: string): string {
+  return normalize(s).replace(/[\s-]+/g, ' ');
+}
+
 /**
- * Build a regex that matches a term as a whole "token", where tokens may
- * contain characters like "+", "#", "." and "/" (C++, C#, Node.js, CI/CD).
+ * Tokens may contain characters like "+", "#", "." and "/" (C++, C#, Node.js, CI/CD).
  * - Not preceded by a letter/digit/+/#/@ or a dot that is glued to a word (".net" in "asp.net").
  * - Not followed by a letter/digit/+/# (so "Java" does not match "JavaScript"),
  *   nor by ".x" (so "node" does not match "node.js" twice), but a sentence-final "." is fine.
- * - `versioned` terms may be followed by "-4o" / ".5" / " 3" ("GPT-4o", "Llama 3.1").
  */
 function termRegex(term: string, flags: string, versioned = false): RegExp {
-  const body = escapeRegex(term).replace(/\\?\s+/g, '[\\s-]+');
-  const after = versioned ? '(?![\\p{L}\\p{N}+#_]|[.\\-/]\\p{L})' : '(?![\\p{L}\\p{N}+#_]|[.\\-/][\\p{L}\\p{N}])';
-  return new RegExp(`(?<![\\p{L}\\p{N}+#@_.])${body}${after}`, flags);
+  return new RegExp(`${BEFORE}${termBody(term)}${versioned ? AFTER_VERSIONED : AFTER}`, flags);
 }
 
-interface CompiledSkill {
-  def: SkillDef;
-  insensitive: RegExp[];
-  sensitive: Array<{ re: RegExp; acronym: boolean }>;
+interface Compiled {
+  /** Every case-insensitive term of every skill in ONE alternation, longest first. */
+  insensitive: RegExp;
+  byTerm: Map<string, SkillDef[]>;
+  sensitive: Array<{ def: SkillDef; re: RegExp; acronym: boolean }>;
 }
 
-let compiled: CompiledSkill[] | null = null;
+let compiled: Compiled | null = null;
 const variantSets = new Map<string, Set<string>>();
 
-function compile(): CompiledSkill[] {
+/**
+ * One big regex instead of hundreds of small ones: much faster, and because
+ * alternatives are tried longest-first, a longer term wins at each position
+ * ("github actions" before "github").
+ */
+function compile(): Compiled {
   if (compiled) return compiled;
-  compiled = TAXONOMY.map((def) => {
+  const byTerm = new Map<string, SkillDef[]>();
+  const sensitive: Compiled['sensitive'] = [];
+  for (const def of TAXONOMY) {
     const terms = new Set<string>([...(def.aliases ?? []), ...(def.variants ?? [])].map((a) => normalize(a)));
     if (!def.labelIsAmbiguous) terms.add(normalize(def.label));
-    return {
-      def,
-      insensitive: [...terms].map((t) => termRegex(t, 'gu')),
-      sensitive: (def.caseSensitive ?? []).map((t) => ({ re: termRegex(t, 'gu', def.versioned), acronym: /^[A-Z]{3,}$/.test(t) })),
-    };
-  });
+    for (const t of terms) {
+      const key = collapse(t);
+      const defs = byTerm.get(key) ?? [];
+      if (!defs.includes(def)) defs.push(def);
+      byTerm.set(key, defs);
+    }
+    for (const t of def.caseSensitive ?? []) {
+      sensitive.push({ def, re: termRegex(t, 'gu', def.versioned), acronym: /^[A-Z]{3,}$/.test(t) });
+    }
+  }
+  const alternatives = [...byTerm.keys()].sort((a, b) => b.length - a.length).map(termBody);
+  compiled = { insensitive: new RegExp(`${BEFORE}(?:${alternatives.join('|')})${AFTER}`, 'gu'), byTerm, sensitive };
   return compiled;
 }
 
@@ -63,7 +88,6 @@ export function spellingsOf(id: string): ReadonlySet<string> {
   let set = variantSets.get(id);
   if (!set) {
     const def = TAXONOMY_BY_ID.get(id);
-    const collapse = (s: string) => normalize(s).replace(/[\s-]+/g, ' ');
     set = new Set(def ? [def.label, ...(def.variants ?? [])].map(collapse) : []);
     variantSets.set(id, set);
   }
@@ -72,7 +96,7 @@ export function spellingsOf(id: string): ReadonlySet<string> {
 
 /** True when `surface` is just a spelling of skill `id` ("ReactJS" for React), not an alias ("Java 17"). */
 export function isSpellingOf(id: string, surface: string): boolean {
-  return spellingsOf(id).has(normalize(surface).replace(/[\s-]+/g, ' '));
+  return spellingsOf(id).has(collapse(surface));
 }
 
 export interface SkillHit {
@@ -107,25 +131,24 @@ export function extractSkills(text: string, opts: ExtractOptions = {}): Extracte
   const lower = normalize(text);
   const all: Array<SkillHit & { def: SkillDef; end: number }> = [];
 
-  for (const c of compile()) {
-    for (const re of c.insensitive) {
-      re.lastIndex = 0;
-      for (const m of lower.matchAll(re)) {
-        all.push({ id: c.def.id, def: c.def, index: m.index, end: m.index + m[0].length, surface: original.slice(m.index, m.index + m[0].length) });
-      }
+  const c = compile();
+  for (const m of lower.matchAll(c.insensitive)) {
+    const surface = original.slice(m.index, m.index + m[0].length);
+    for (const def of c.byTerm.get(collapse(m[0])) ?? []) {
+      all.push({ id: def.id, def, index: m.index, end: m.index + m[0].length, surface });
     }
-    for (const { re, acronym } of c.sensitive) {
-      for (const m of original.matchAll(re)) {
-        if (!opts.loose) {
-          if (c.def.context) {
-            if (!hasContext(original, m.index, m[0].length, c.def.context)) continue;
-          } else if (!acronym && !looksTechnical(original, m.index, m[0].length)) {
-            // "Go" at the start of a sentence is almost always the verb; require a tech-ish neighbour.
-            continue;
-          }
+  }
+  for (const { def, re, acronym } of c.sensitive) {
+    for (const m of original.matchAll(re)) {
+      if (!opts.loose) {
+        if (def.context) {
+          if (!hasContext(original, m.index, m[0].length, def.context)) continue;
+        } else if (!acronym && !looksTechnical(original, m.index, m[0].length)) {
+          // "Go" at the start of a sentence is almost always the verb; require a tech-ish neighbour.
+          continue;
         }
-        all.push({ id: c.def.id, def: c.def, index: m.index, end: m.index + m[0].length, surface: m[0] });
       }
+      all.push({ id: def.id, def, index: m.index, end: m.index + m[0].length, surface: m[0] });
     }
   }
 
