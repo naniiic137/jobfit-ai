@@ -3,13 +3,27 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>JobFit AI</title>
-    <meta name="description" content="Match your CV against a job ad: score, missing skills, tailored CV bullets, a cover-letter draft (EN/FR) and interview questions. Offline or with a free LLM." />
+    <title>JobFit AI: does your CV fit the job?</title>
+    <meta name="description" content="Match your CV against a job ad: score, missing skills, tailored CV bullets, a cover-letter draft (EN/FR) and interview questions. Offline or with a free LLM. It never invents experience." />
     <meta name="theme-color" content="#0b0d17" />
+    <link rel="canonical" href="https://naniiic137.github.io/jobfit-ai/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="JobFit AI" />
+    <meta property="og:title" content="JobFit AI: does your CV fit the job?" />
+    <meta property="og:description" content="Paste your CV and a job ad: match score, missing skills, sharper bullets, a cover letter (EN/FR) and interview questions. Runs in your browser, offline or with a free LLM." />
+    <meta property="og:url" content="https://naniiic137.github.io/jobfit-ai/" />
+    <meta property="og:image" content="https://naniiic137.github.io/jobfit-ai/og-image.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="JobFit AI results: a match score gauge, coverage by category, matched and missing skills." />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="JobFit AI: does your CV fit the job?" />
+    <meta name="twitter:description" content="Match score, missing skills, tailored bullets, cover letter and interview prep. Runs in your browser; never invents experience." />
+    <meta name="twitter:image" content="https://naniiic137.github.io/jobfit-ai/og-image.png" />
+    <meta name="twitter:image:alt" content="JobFit AI results: a match score gauge, coverage by category, matched and missing skills." />
+
     <script>
       try {
         var t = JSON.parse(localStorage.getItem('jobfit.theme'));
@@ -19,6 +33,11 @@
     </script>
   </head>
   <body>
+    <noscript>
+      <p class="noscript">
+        JobFit AI needs JavaScript. It runs entirely in your browser (there is no server), so please enable JavaScript to use it.
+      </p>
+    </noscript>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

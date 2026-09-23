@@ -1,6 +1,9 @@
 import { z } from 'zod';
 import { IMPORTANCES, SKILL_CATEGORIES } from './categories';
 
+// No `new Function` probe or JIT: the site's CSP forbids eval (and would report the probe).
+z.config({ jitless: true });
+
 /**
  * The single contract every provider must satisfy.
  * - The offline analyzer builds it deterministically.
