@@ -272,3 +272,9 @@ export function cvSkillMap(cv: string): Map<string, ExtractedSkill> {
   }
   return map;
 }
+
+/** Replace the first whole-token occurrence of `from` (never "React" inside "Reactive"). */
+export function replaceToken(text: string, from: string, to: string): string {
+  const re = new RegExp(`${BEFORE}${escapeRegex(from)}${AFTER}`, 'u');
+  return text.replace(re, () => to);
+}

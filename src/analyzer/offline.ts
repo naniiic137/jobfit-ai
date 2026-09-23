@@ -1,10 +1,11 @@
 import type { AnalysisPayload, BulletSuggestion, Importance, InterviewQuestion, SkillAssessment } from '../schemas/analysis';
 import type { OutputLanguage } from '../types';
-import { bestEvidenceIndex, cvSkillMap, extractSkills, lineAt, normalize, snippetAt, type ExtractedSkill } from './extract';
+import { bestEvidenceIndex, cvSkillMap, extractSkills, isSpellingOf, lineAt, normalize, replaceToken, snippetAt, type ExtractedSkill } from './extract';
 import { cvFacts, jobFacts, type CvFacts, type JobFacts } from './facts';
-import { computeScore, scoreBand, skillWeight } from './score';
+import { computeScore, LOW_COVERAGE, scoreBand, skillWeight } from './score';
 import { detectSections, importanceFor, sectionAt } from './sections';
 import type { SkillCategory } from '../schemas/analysis';
+import { skillLabel, TAXONOMY_BY_ID } from './taxonomy';
 import { COVER, QUESTION_BANK, SOFT_QUESTIONS, WEAK_OPENINGS, formatYears, listJoin, t } from './templates';
 
 /** Categories made of named technologies (as opposed to practices and soft skills). */
@@ -117,8 +118,17 @@ export function buildSummary(skills: SkillAssessment[], lang: OutputLanguage): s
   const d = computeScore(skills);
   const nice = d.niceTotal ? t('summaryNice', lang, { n: d.niceMatched, t: d.niceTotal }) : '';
   const head = t(`summary_${scoreBand(d.score)}`, lang, { req: d.requiredMatched, reqTotal: d.requiredTotal, nice });
-  const gaps = missingByWeight(skills).filter((s) => s.importance === 'required' && s.category !== 'soft').slice(0, 3).map((s) => s.name);
-  return head + (gaps.length ? t('summaryGaps', lang, { gaps: listJoin(gaps, lang) }) : t('summaryNoGaps', lang));
+  // Technical gaps first; soft skills only when they are the only thing missing,
+  // so the summary never says "nothing is missing" next to a missing requirement.
+  const missingReq = missingByWeight(skills).filter((s) => s.importance === 'required');
+  const tech = missingReq.filter((s) => s.category !== 'soft');
+  const gaps = (tech.length ? tech : missingReq).slice(0, 3).map((s) => skillLabel(s.name, lang));
+  let tail: string;
+  if (gaps.length) tail = t('summaryGaps', lang, { gaps: listJoin(gaps, lang) });
+  else if (d.requiredTotal === 0) tail = t('summaryNoRequired', lang);
+  else tail = t('summaryNoGaps', lang);
+  const coverage = skills.length < LOW_COVERAGE ? t('summaryLowCoverage', lang, { n: skills.length }) : '';
+  return head + tail + coverage;
 }
 
 function buildNotes(ctx: OfflineContext): string[] {
@@ -129,7 +139,7 @@ function buildNotes(ctx: OfflineContext): string[] {
     notes.push(t(cvYears + 0.25 < minYears ? 'noteYearsGap' : 'noteYearsOk', ctx.lang, { min: minYears, cv: formatYears(cvYears, ctx.lang) }));
   }
   const asked = new Set(ctx.jobSkills.map((s) => s.id));
-  const extra = [...ctx.cvSkills.values()].filter((s) => !asked.has(s.def.id) && s.def.category !== 'soft').map((s) => s.def.label).slice(0, 4);
+  const extra = [...ctx.cvSkills.values()].filter((s) => !asked.has(s.def.id) && s.def.category !== 'soft').map((s) => skillLabel(s.def.id, ctx.lang)).slice(0, 4);
   if (extra.length) notes.push(t('noteExtra', ctx.lang, { skills: listJoin(extra, ctx.lang) }));
   notes.push(t('noteOffline', ctx.lang));
   return notes;
@@ -153,21 +163,27 @@ export function improveBullet(bullet: string, ctx: OfflineContext): BulletSugges
   }
 
   // 2. Mirror the job ad's spelling of skills mentioned in this bullet.
+  //    Only pure spelling variants of the SAME product are rewritten ("ReactJS" → "React").
+  //    Other products ("GitLab" is not "Git", "Zustand" is not "Redux") and versions
+  //    ("Java 17") are never touched: that would change what the candidate claims.
   const mirrored: string[] = [];
   for (const ex of extractSkills(text)) {
     const js = ctx.jobSkills.find((j) => j.id === ex.def.id);
-    // Only swap names of technologies ("ReactJS" → "React"); rewording practices changes meaning.
-    if (!js || !NAMED_TECH.has(js.category)) continue;
+    // Only swap names of technologies; rewording practices changes meaning.
+    if (!js || !NAMED_TECH.has(js.category) || !isSpellingOf(js.id, js.jobSurface)) continue;
     for (const hit of ex.hits) {
+      if (!isSpellingOf(js.id, hit.surface)) continue;
       const a = normalize(hit.surface);
       const b = normalize(js.jobSurface);
       // Skip pure plural/singular differences ("REST API" vs "REST APIs").
       const sameWord = a === b || `${a}s` === b || `${b}s` === a;
-      if (!sameWord && js.jobSurface.length > 1 && !mirrored.includes(js.jobSurface)) {
-        text = text.replace(hit.surface, js.jobSurface);
+      if (sameWord || js.jobSurface.length <= 1 || mirrored.includes(js.jobSurface)) continue;
+      const next = replaceToken(text, hit.surface, js.jobSurface);
+      if (next !== text) {
+        text = next;
         mirrored.push(js.jobSurface);
-        break;
       }
+      break;
     }
   }
   if (mirrored.length) reasons.push(t('mirror', ctx.lang, { terms: mirrored.join(', ') }));
@@ -180,6 +196,20 @@ export function improveBullet(bullet: string, ctx: OfflineContext): BulletSugges
 
   if (!reasons.length || text === bullet) return null;
   return { original: bullet, suggestion: text, reason: reasons.join(' ') };
+}
+
+/**
+ * The name to use when the letter CLAIMS a skill: the ad's spelling if it is
+ * only a spelling of the skill, otherwise the neutral label. The ad may say
+ * "Java 17" while the CV only proves "Java".
+ */
+function claimName(j: JobSkill, lang: OutputLanguage): string {
+  if (isSpellingOf(j.id, j.jobSurface)) return j.jobSurface;
+  const label = skillLabel(j.id, lang);
+  // Generic names (the ones with a French label) read as ordinary words mid-sentence
+  // ("relational databases"); product names and acronyms keep their casing.
+  const generic = Boolean(TAXONOMY_BY_ID.get(j.id)?.labelFr);
+  return generic && /^\p{Lu}\p{Ll}/u.test(label) ? label[0]!.toLowerCase() + label.slice(1) : label;
 }
 
 function buildBulletSuggestions(ctx: OfflineContext): BulletSuggestion[] {
@@ -202,7 +232,7 @@ function buildBulletSuggestions(ctx: OfflineContext): BulletSuggestion[] {
     out.push({
       original: null,
       suggestion: t('gapSuggestion', ctx.lang, { skill: g.jobSurface }),
-      reason: t(g.importance === 'required' ? 'gapReason' : 'niceGapReason', ctx.lang, { skill: g.label }),
+      reason: t(g.importance === 'required' ? 'gapReason' : 'niceGapReason', ctx.lang, { skill: skillLabel(g.id, ctx.lang) }),
     });
   }
   return out;
@@ -226,12 +256,12 @@ export function buildCoverLetter(ctx: OfflineContext): string {
   const { title, company } = ctx.jobFacts;
   const matched = ctx.jobSkills.filter((j) => ctx.cvSkills.has(j.id));
   const tech = matched.filter((j) => NAMED_TECH.has(j.category)).sort((a, b) => skillWeight(b) - skillWeight(a));
-  const soft = matched.filter((j) => j.category === 'soft' && !SPOKEN_LANGUAGES.has(j.id)).map((j) => j.label.toLowerCase());
+  const soft = matched.filter((j) => j.category === 'soft' && !SPOKEN_LANGUAGES.has(j.id)).map((j) => skillLabel(j.id, ctx.lang).toLowerCase());
   const missingReq = ctx.jobSkills.filter((j) => j.importance === 'required' && NAMED_TECH.has(j.category) && !ctx.cvSkills.has(j.id));
 
   const paragraphs: string[] = [];
-  paragraphs.push(c.opening(title ?? c.position, company));
-  if (tech.length) paragraphs.push(c.stack(listJoin(tech.slice(0, 5).map((j) => j.jobSurface), ctx.lang), ctx.cvFacts.years));
+  paragraphs.push(c.opening(title, company));
+  if (tech.length) paragraphs.push(c.stack(listJoin(tech.slice(0, 5).map((j) => claimName(j, ctx.lang)), ctx.lang), ctx.cvFacts.years));
 
   // Quote the CV's own bullets that prove the most important matched skills.
   const techIds = new Set(tech.map((j) => j.id));
@@ -266,8 +296,8 @@ export function buildQuestions(ctx: OfflineContext): InterviewQuestion[] {
   for (const j of matchedTech.slice(0, 3)) {
     const hits = ctx.cvSkills.get(j.id)!.hits;
     qs.push({
-      question: QUESTION_BANK[j.id]?.[lang] ?? t('qFallback', lang, { skill: j.label }),
-      why: t('qSkillWhy', lang, { skill: j.label }),
+      question: QUESTION_BANK[j.id]?.[lang] ?? t('qFallback', lang, { skill: skillLabel(j.id, lang) }),
+      why: t('qSkillWhy', lang, { skill: skillLabel(j.id, lang) }),
       tip: t('qSkillTip', lang, { evidence: snippetAt(ctx.cv, bestEvidenceIndex(ctx.cv, hits), 90) }),
     });
   }
@@ -275,9 +305,9 @@ export function buildQuestions(ctx: OfflineContext): InterviewQuestion[] {
   for (const j of missingTech.slice(0, 2)) {
     const related = matchedTech.find((m) => m.category === j.category && m.id !== j.id);
     qs.push({
-      question: t('qGap', lang, { skill: j.label }),
-      why: t('qGapWhy', lang, { skill: j.label }),
-      tip: t('qGapTip', lang, { related: related ? t('qRelated', lang, { skill: related.label }) : '' }),
+      question: t('qGap', lang, { skill: skillLabel(j.id, lang) }),
+      why: t('qGapWhy', lang, { skill: skillLabel(j.id, lang) }),
+      tip: t('qGapTip', lang, { related: related ? t('qRelated', lang, { skill: skillLabel(related.id, lang) }) : '' }),
     });
   }
 
@@ -287,7 +317,7 @@ export function buildQuestions(ctx: OfflineContext): InterviewQuestion[] {
   }
 
   for (const j of byWeight.filter((s) => s.category === 'soft' && SOFT_QUESTIONS[s.id]).slice(0, 2)) {
-    qs.push({ question: SOFT_QUESTIONS[j.id]![lang], why: t('qSoftWhy', lang, { skill: j.label }), tip: t('qSoftTip', lang) });
+    qs.push({ question: SOFT_QUESTIONS[j.id]![lang], why: t('qSoftWhy', lang, { skill: skillLabel(j.id, lang) }), tip: t('qSoftTip', lang) });
   }
 
   qs.push({

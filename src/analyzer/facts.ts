@@ -45,7 +45,7 @@ export function cvFacts(cv: string, now = new Date()): CvFacts {
  */
 export function estimateYears(cv: string, now = new Date()): number | null {
   const n = normalize(cv);
-  const explicit = n.match(/(\d{1,2})\+?\s*(years?|yrs|ans|annees)\s+(of\s+)?(professional\s+)?(experience|d'experience|de experience)/);
+  const explicit = n.match(/(\d{1,2})\+?\s*(years?|yrs|ans?|annees?)\s+(of\s+)?(professional\s+)?(experience|d'experience|de experience)/);
   if (explicit) return Number(explicit[1]);
 
   const range = /(?:(\d{1,2})\/)?((?:19|20)\d{2})\s*(?:-|to|a|au)\s*(?:(\d{1,2})\/)?((?:19|20)\d{2}|present|now|current|today|aujourd'hui|actuel|en cours)/g;
@@ -103,7 +103,7 @@ export function jobFacts(job: string): JobFacts {
     }
   }
 
-  const years = normalize(job).match(/(\d{1,2})\s*\+?\s*(?:-\s*\d{1,2}\s*)?(?:years?|yrs|ans|annees)\b[^.\n]{0,40}(experience|d'experience)/);
+  const years = normalize(job).match(/(\d{1,2})\s*\+?\s*(?:-\s*\d{1,2}\s*)?(?:years?|yrs|ans?|annees?)\b[^.\n]{0,40}(experience|d'experience)/);
   return { title: clean(title), company: clean(company), minYears: years ? Number(years[1]) : null };
 }
 

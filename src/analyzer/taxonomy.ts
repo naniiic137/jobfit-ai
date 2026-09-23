@@ -5,6 +5,8 @@ export interface SkillDef {
   id: string;
   /** Display label; also matched (lower-cased) unless `labelIsAmbiguous`. */
   label: string;
+  /** French label for generated French text, when the English one is not a brand name. */
+  labelFr?: string;
   category: SkillCategory;
   /**
    * Lower-case, accent-free terms that mean THIS skill (English + French), e.g.
@@ -91,8 +93,8 @@ export const TAXONOMY: SkillDef[] = [
   { id: 'flutter', label: 'Flutter', category: 'frontend' },
   { id: 'vite', label: 'Vite', category: 'tool', variants: ['vitejs'] },
   { id: 'webpack', label: 'Webpack', category: 'tool' },
-  { id: 'responsive', label: 'Responsive design', category: 'frontend', aliases: ['responsive', 'mobile-first', 'mobile first', 'design responsive', 'responsive web design'] },
-  { id: 'a11y', label: 'Accessibility', category: 'frontend', aliases: ['a11y', 'wcag', 'accessibilite', 'aria'] },
+  { id: 'responsive', label: 'Responsive design', labelFr: 'Design responsive', category: 'frontend', aliases: ['responsive', 'mobile-first', 'mobile first', 'design responsive', 'responsive web design'] },
+  { id: 'a11y', label: 'Accessibility', labelFr: 'Accessibilité', category: 'frontend', aliases: ['a11y', 'wcag', 'accessibilite', 'aria'] },
   { id: 'figma', label: 'Figma', category: 'tool' },
 
   // ── Backend ────────────────────────────────────────────────────────────
@@ -110,6 +112,7 @@ export const TAXONOMY: SkillDef[] = [
   {
     id: 'rest',
     label: 'REST APIs',
+    labelFr: 'API REST',
     category: 'backend',
     variants: ['rest api', 'restful api', 'restful apis'],
     aliases: ['restful', 'api rest', 'apis rest', 'api restful', 'web services', 'services web'],
@@ -120,7 +123,7 @@ export const TAXONOMY: SkillDef[] = [
   { id: 'apollo', label: 'Apollo GraphQL', category: 'backend', aliases: ['apollo', 'apollo client', 'apollo server'] },
   { id: 'websockets', label: 'WebSockets', category: 'backend', variants: ['websocket', 'web sockets'] },
   { id: 'socketio', label: 'Socket.IO', category: 'backend', variants: ['socket.io', 'socketio'] },
-  { id: 'auth', label: 'Authentication', category: 'backend', aliases: ['authentication', 'authentification', 'user authentication'] },
+  { id: 'auth', label: 'Authentication', labelFr: 'Authentification', category: 'backend', aliases: ['authentication', 'authentification', 'user authentication'] },
   { id: 'jwt', label: 'JWT', category: 'backend', aliases: ['json web token', 'json web tokens'] },
   { id: 'oauth', label: 'OAuth', category: 'backend', aliases: ['oauth2', 'oauth 2.0'] },
   { id: 'microservices', label: 'Microservices', category: 'backend', aliases: ['micro-services', 'microservice', 'micro services'] },
@@ -149,10 +152,11 @@ export const TAXONOMY: SkillDef[] = [
   {
     id: 'rdbms',
     label: 'Relational databases',
+    labelFr: 'Bases de données relationnelles',
     category: 'database',
     aliases: ['relational database', 'relational databases', 'rdbms', 'base de donnees relationnelle', 'bases de donnees relationnelles', 'sgbdr'],
   },
-  { id: 'db-design', label: 'Database design', category: 'database', aliases: ['data modeling', 'data modelling', 'modelisation de donnees', 'conception de base de donnees', 'schema design'] },
+  { id: 'db-design', label: 'Database design', labelFr: 'Conception de bases de données', category: 'database', aliases: ['data modeling', 'data modelling', 'modelisation de donnees', 'conception de base de donnees', 'schema design'] },
 
   // ── DevOps / cloud ─────────────────────────────────────────────────────
   { id: 'git', label: 'Git', category: 'tool', aliases: ['version control', 'gestion de versions', 'controle de version'] },
@@ -180,7 +184,7 @@ export const TAXONOMY: SkillDef[] = [
   { id: 'nginx', label: 'Nginx', category: 'devops' },
   { id: 'vercel', label: 'Vercel', category: 'devops' },
   { id: 'netlify', label: 'Netlify', category: 'devops' },
-  { id: 'iac', label: 'Infrastructure as code', category: 'devops', aliases: ['infrastructure as code', 'iac'] },
+  { id: 'iac', label: 'Infrastructure as code', labelFr: 'Infrastructure as Code', category: 'devops', aliases: ['infrastructure as code', 'iac'] },
   { id: 'terraform', label: 'Terraform', category: 'devops' },
   { id: 'monitoring', label: 'Monitoring', category: 'devops', aliases: ['observability', 'observabilite'] },
   { id: 'prometheus', label: 'Prometheus', category: 'devops' },
@@ -200,12 +204,13 @@ export const TAXONOMY: SkillDef[] = [
   { id: 'llama', label: 'Llama', category: 'ai', caseSensitive: ['Llama', 'LLaMA'], ...LLM_NAME },
   { id: 'ollama', label: 'Ollama', category: 'ai' },
   { id: 'chatgpt', label: 'ChatGPT', category: 'ai' },
-  { id: 'prompt-eng', label: 'Prompt engineering', category: 'ai', aliases: ['prompt engineering', 'prompting', 'prompt design', 'ingenierie de prompt', 'ingenierie des prompts', 'few-shot'] },
-  { id: 'ai-agents', label: 'AI agents', category: 'ai', aliases: ['ai agents', 'ai agent', 'agents ia', 'agent ia', 'agentic', 'tool calling', 'function calling'] },
+  { id: 'prompt-eng', label: 'Prompt engineering', labelFr: 'Ingénierie de prompts', category: 'ai', aliases: ['prompt engineering', 'prompting', 'prompt design', 'ingenierie de prompt', 'ingenierie des prompts', 'few-shot'] },
+  { id: 'ai-agents', label: 'AI agents', labelFr: 'Agents IA', category: 'ai', aliases: ['ai agents', 'ai agent', 'agents ia', 'agent ia', 'agentic', 'tool calling', 'function calling'] },
   { id: 'rag', label: 'RAG', category: 'ai', aliases: ['retrieval augmented generation', 'retrieval-augmented generation'] },
   {
     id: 'vector-db',
     label: 'Vector databases',
+    labelFr: 'Bases de données vectorielles',
     category: 'ai',
     aliases: ['vector database', 'vector databases', 'vector store', 'vector stores', 'base de donnees vectorielle', 'bases de donnees vectorielles'],
   },
@@ -216,17 +221,17 @@ export const TAXONOMY: SkillDef[] = [
   { id: 'langgraph', label: 'LangGraph', category: 'ai' },
   { id: 'llamaindex', label: 'LlamaIndex', category: 'ai', variants: ['llama index', 'llama-index'] },
   { id: 'huggingface', label: 'Hugging Face', category: 'ai', variants: ['huggingface'] },
-  { id: 'ml', label: 'Machine learning', category: 'ai', aliases: ['machine learning', 'apprentissage automatique'] },
-  { id: 'deep-learning', label: 'Deep learning', category: 'ai', aliases: ['deep learning', 'apprentissage profond'] },
+  { id: 'ml', label: 'Machine learning', labelFr: 'Apprentissage automatique', category: 'ai', aliases: ['machine learning', 'apprentissage automatique'] },
+  { id: 'deep-learning', label: 'Deep learning', labelFr: 'Apprentissage profond', category: 'ai', aliases: ['deep learning', 'apprentissage profond'] },
   { id: 'sklearn', label: 'scikit-learn', category: 'ai', variants: ['sklearn', 'scikit learn'] },
-  { id: 'nlp', label: 'NLP', category: 'ai', aliases: ['natural language processing', 'traitement du langage naturel'] },
+  { id: 'nlp', label: 'NLP', labelFr: 'Traitement du langage naturel', category: 'ai', aliases: ['natural language processing', 'traitement du langage naturel'] },
   { id: 'pytorch', label: 'PyTorch', category: 'ai' },
   { id: 'tensorflow', label: 'TensorFlow', category: 'ai' },
   { id: 'keras', label: 'Keras', category: 'ai' },
   { id: 'pandas', label: 'Pandas', category: 'ai' },
   { id: 'numpy', label: 'NumPy', category: 'ai' },
   { id: 'jupyter', label: 'Jupyter', category: 'ai', aliases: ['jupyter notebook', 'jupyter notebooks'] },
-  { id: 'data-analysis', label: 'Data analysis', category: 'ai', aliases: ['data analysis', 'analyse de donnees', 'data visualization', 'data visualisation', 'dataviz'] },
+  { id: 'data-analysis', label: 'Data analysis', labelFr: 'Analyse de données', category: 'ai', aliases: ['data analysis', 'analyse de donnees', 'data visualization', 'data visualisation', 'dataviz'] },
   { id: 'powerbi', label: 'Power BI', category: 'tool', variants: ['powerbi'] },
   { id: 'excel', label: 'Excel', category: 'tool', aliases: ['microsoft excel', 'ms excel'], caseSensitive: ['Excel'], labelIsAmbiguous: true },
 
@@ -245,6 +250,7 @@ export const TAXONOMY: SkillDef[] = [
   {
     id: 'testing',
     label: 'Automated testing',
+    labelFr: 'Tests automatisés',
     category: 'practice',
     aliases: [
       'unit tests', 'unit test', 'unit testing', 'tests unitaires', 'test unitaire', 'automated tests', 'automated testing', 'test automation',
@@ -263,26 +269,26 @@ export const TAXONOMY: SkillDef[] = [
   { id: 'agile', label: 'Agile', category: 'practice', aliases: ['agile', 'methodes agiles', 'methodologie agile', 'agilite'] },
   { id: 'scrum', label: 'Scrum', category: 'practice', aliases: ['sprints', 'sprint'] },
   { id: 'kanban', label: 'Kanban', category: 'practice' },
-  { id: 'code-review', label: 'Code review', category: 'practice', aliases: ['code reviews', 'revue de code', 'revues de code', 'pull requests', 'pull request'] },
-  { id: 'clean-code', label: 'Clean code', category: 'practice', aliases: ['clean architecture', 'solid principles', 'principes solid', 'design patterns', 'bonnes pratiques', 'best practices', 'code propre'] },
-  { id: 'oop', label: 'OOP', category: 'practice', aliases: ['object-oriented', 'object oriented programming', 'programmation orientee objet', 'poo'] },
-  { id: 'performance', label: 'Web performance', category: 'practice', aliases: ['web performance', 'performance optimization', 'optimisation des performances', 'lighthouse', 'core web vitals'] },
-  { id: 'security', label: 'Web security', category: 'practice', aliases: ['owasp', 'web security', 'securite web', 'securite applicative', 'application security'] },
+  { id: 'code-review', label: 'Code review', labelFr: 'Revue de code', category: 'practice', aliases: ['code reviews', 'revue de code', 'revues de code', 'pull requests', 'pull request'] },
+  { id: 'clean-code', label: 'Clean code', labelFr: 'Code propre', category: 'practice', aliases: ['clean architecture', 'solid principles', 'principes solid', 'design patterns', 'bonnes pratiques', 'best practices', 'code propre'] },
+  { id: 'oop', label: 'OOP', labelFr: 'Programmation orientée objet', category: 'practice', aliases: ['object-oriented', 'object oriented programming', 'programmation orientee objet', 'poo'] },
+  { id: 'performance', label: 'Web performance', labelFr: 'Performance web', category: 'practice', aliases: ['web performance', 'performance optimization', 'optimisation des performances', 'lighthouse', 'core web vitals'] },
+  { id: 'security', label: 'Web security', labelFr: 'Sécurité web', category: 'practice', aliases: ['owasp', 'web security', 'securite web', 'securite applicative', 'application security'] },
   { id: 'seo', label: 'SEO', category: 'practice', aliases: ['referencement', 'referencement naturel'] },
-  { id: 'documentation', label: 'Technical documentation', category: 'practice', aliases: ['technical documentation', 'documentation technique', 'technical writing'] },
-  { id: 'fullstack', label: 'Full-stack development', category: 'practice', aliases: ['full-stack', 'full stack', 'fullstack'] },
+  { id: 'documentation', label: 'Technical documentation', labelFr: 'Documentation technique', category: 'practice', aliases: ['technical documentation', 'documentation technique', 'technical writing'] },
+  { id: 'fullstack', label: 'Full-stack development', labelFr: 'Développement full-stack', category: 'practice', aliases: ['full-stack', 'full stack', 'fullstack'] },
 
   // ── Soft skills ────────────────────────────────────────────────────────
   { id: 'communication', label: 'Communication', category: 'soft', aliases: ['communication skills', 'bonne communication', 'communicate clearly', 'aisance relationnelle'] },
-  { id: 'teamwork', label: 'Teamwork', category: 'soft', aliases: ['team player', 'team work', 'collaboration', 'collaborative', 'travail en equipe', "travail d'equipe", "esprit d'equipe", 'work in a team'] },
-  { id: 'problem-solving', label: 'Problem solving', category: 'soft', aliases: ['problem-solving', 'problem solver', 'resolution de problemes', "esprit d'analyse", 'analytical skills', 'analytical mind', 'esprit analytique'] },
-  { id: 'autonomy', label: 'Autonomy', category: 'soft', aliases: ['autonomous', 'autonomie', 'autonome', 'self-starter', 'self-motivated', 'work independently', 'independently'] },
-  { id: 'curiosity', label: 'Eagerness to learn', category: 'soft', aliases: ['eager to learn', 'willingness to learn', 'curious', 'curiosity', 'curiosite', 'curieux', "envie d'apprendre", 'fast learner', 'quick learner', 'growth mindset'] },
-  { id: 'ownership', label: 'Ownership', category: 'soft', aliases: ['take ownership', 'sens des responsabilites', 'accountability'] },
-  { id: 'time-management', label: 'Time management', category: 'soft', aliases: ['gestion du temps', 'organised', 'organized', 'rigueur', 'rigoureux', 'attention to detail', 'detail-oriented'] },
-  { id: 'english', label: 'English', category: 'soft', aliases: ['anglais', 'fluent english', 'english (fluent)', 'professional english'] },
-  { id: 'french', label: 'French', category: 'soft', aliases: ['francais', 'fluent french'] },
-  { id: 'arabic', label: 'Arabic', category: 'soft', aliases: ['arabe'] },
+  { id: 'teamwork', label: 'Teamwork', labelFr: 'Travail en équipe', category: 'soft', aliases: ['team player', 'team work', 'collaboration', 'collaborative', 'travail en equipe', "travail d'equipe", "esprit d'equipe", 'work in a team'] },
+  { id: 'problem-solving', label: 'Problem solving', labelFr: 'Résolution de problèmes', category: 'soft', aliases: ['problem-solving', 'problem solver', 'resolution de problemes', "esprit d'analyse", 'analytical skills', 'analytical mind', 'esprit analytique'] },
+  { id: 'autonomy', label: 'Autonomy', labelFr: 'Autonomie', category: 'soft', aliases: ['autonomous', 'autonomie', 'autonome', 'self-starter', 'self-motivated', 'work independently', 'independently'] },
+  { id: 'curiosity', label: 'Eagerness to learn', labelFr: 'Envie d’apprendre', category: 'soft', aliases: ['eager to learn', 'willingness to learn', 'curious', 'curiosity', 'curiosite', 'curieux', "envie d'apprendre", 'fast learner', 'quick learner', 'growth mindset'] },
+  { id: 'ownership', label: 'Ownership', labelFr: 'Sens des responsabilités', category: 'soft', aliases: ['take ownership', 'sens des responsabilites', 'accountability'] },
+  { id: 'time-management', label: 'Time management', labelFr: 'Organisation', category: 'soft', aliases: ['gestion du temps', 'organised', 'organized', 'rigueur', 'rigoureux', 'attention to detail', 'detail-oriented'] },
+  { id: 'english', label: 'English', labelFr: 'Anglais', category: 'soft', aliases: ['anglais', 'fluent english', 'english (fluent)', 'professional english'] },
+  { id: 'french', label: 'French', labelFr: 'Français', category: 'soft', aliases: ['francais', 'fluent french'] },
+  { id: 'arabic', label: 'Arabic', labelFr: 'Arabe', category: 'soft', aliases: ['arabe'] },
 ];
 
 /**
@@ -377,3 +383,10 @@ export const IMPLIES: Record<string, string[]> = {
 };
 
 export const TAXONOMY_BY_ID: ReadonlyMap<string, SkillDef> = new Map(TAXONOMY.map((s) => [s.id, s]));
+
+/** The skill's name in the output language ("REST APIs" → "API REST" in French). */
+export function skillLabel(idOrLabel: string, lang: 'en' | 'fr'): string {
+  const def = TAXONOMY_BY_ID.get(idOrLabel) ?? TAXONOMY.find((d) => d.label === idOrLabel);
+  if (!def) return idOrLabel;
+  return lang === 'fr' && def.labelFr ? def.labelFr : def.label;
+}

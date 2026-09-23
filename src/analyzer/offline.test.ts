@@ -54,7 +54,9 @@ describe('analyzeOffline on the bundled sample', () => {
     const usedSentence = payload.coverLetter.split('\n').find((l) => l.includes('I have used'))!;
     expect(usedSentence).toBeDefined();
     for (const missing of ['PostgreSQL', 'Docker', 'Next.js', 'AWS']) expect(usedSentence).not.toContain(missing);
-    expect(payload.coverLetter).toMatch(/not used them professionally yet/);
+    // Gaps are phrased as growth, never as "I have not used X" (a keyword miss proves nothing).
+    expect(payload.coverLetter).toMatch(/also involves .*PostgreSQL.*keen to keep developing/);
+    expect(payload.coverLetter).not.toMatch(/have not used|haven.t used|never used/i);
     expect(payload.coverLetter).toContain('Sami Ben Salah');
   });
 
@@ -90,9 +92,16 @@ describe('French output', () => {
   const fr = analyzeOffline(SAMPLE_CV, SAMPLE_JOB, 'fr', NOW);
   it('writes the generated text in French', () => {
     expect(fr.summary).toMatch(/compétences requises/);
-    expect(fr.coverLetter).toMatch(/^Madame, Monsieur/);
-    expect(fr.coverLetter).toMatch(/Je ne les ai pas encore utilisés/);
+    expect(fr.coverLetter).toMatch(/^Madame, Monsieur,\n\n/);
+    expect(fr.coverLetter).toMatch(/ce sont des domaines dans lesquels je souhaite continuer à progresser/);
+    // Gender-neutral: no "ravi" / "heureux" / "fier" that would need agreement.
+    expect(fr.coverLetter).not.toMatch(/\b(ravi|heureux|fier)\b/);
+    expect(fr.coverLetter).not.toMatch(/n.ai pas|ne les ai pas/);
     expect(fr.interviewQuestions.at(-1)!.question).toMatch(/Pourquoi voulez-vous rejoindre Nimbus Labs/);
+    // Generic skills are named in French in French text; brand names stay as they are.
+    const qonto = analyzeOffline(SAMPLE_CV, 'Dev\nVotre profil\n- Concevoir des API REST avec Node.js\n- Bases de données relationnelles\n- Kubernetes', 'fr', NOW);
+    expect(qonto.coverLetter).toMatch(/j’ai utilisé API REST, Node\.js et bases de données relationnelles,/);
+    expect(qonto.summary).toMatch(/Principaux manques : Kubernetes\./);
   });
 });
 
@@ -128,5 +137,78 @@ describe('helpers', () => {
     const p = analyzeOffline(SAMPLE_CV, 'We need a great person to join us. Apply now please thanks.', 'en', NOW);
     expect(p.skills).toEqual([]);
     expect(p.summary).toMatch(/No known skills/);
+  });
+});
+
+describe('never invents experience (regression)', () => {
+  const ad = `Backend Developer at Acme
+Requirements
+- Git and Redux
+- PyTorch
+- Java
+- React`;
+  const cv = `Amira Trabelsi
+EXPERIENCE
+- Worked on deployments through GitLab CI for 4 services
+- Built the checkout state with Zustand
+- Trained a classifier with TensorFlow
+- Worked on billing services in Java 17
+- Worked on the admin panel in ReactJS
+SKILLS
+Java`;
+  const ctx = buildContext(cv, ad, 'en', NOW);
+  const suggestion = (needle: string) => {
+    const original = cv.split('\n').find((l) => l.includes(needle))!.slice(2);
+    // null means "nothing to improve": the bullet is kept as-is.
+    return improveBullet(original, ctx)?.suggestion ?? original;
+  };
+
+  it.each([
+    ['GitLab CI', 'Git CI'],
+    ['Zustand', 'Redux'],
+    ['TensorFlow', 'PyTorch'],
+    ['Java 17', null],
+  ])('never rewrites "%s" into another product or version', (product, forbidden) => {
+    const out = suggestion(product);
+    expect(out).toContain(product);
+    if (forbidden) expect(out).not.toContain(forbidden);
+  });
+
+  it('keeps the version when it does rewrite the bullet (the ad says "Java")', () => {
+    expect(suggestion('Java 17')).toBe('Developed billing services in Java 17');
+  });
+
+  it('still mirrors pure spelling variants (ReactJS → React)', () => {
+    expect(suggestion('ReactJS')).toContain('admin panel in React ');
+  });
+
+  it('does not credit other products as matches', () => {
+    const p = analyzeOffline(cv, ad, 'en', NOW);
+    const inCv = Object.fromEntries(p.skills.map((s) => [s.name, s.inCv]));
+    expect(inCv).toMatchObject({ Redux: false, PyTorch: false, Git: true, Java: true, React: true });
+    // Git is proven by GitLab (a true implication), but its evidence is the real GitLab line.
+    expect(p.skills.find((s) => s.name === 'Git')!.evidence).toContain('GitLab CI');
+    const letter = p.coverLetter;
+    expect(letter).not.toMatch(/I have used[^.]*(Redux|PyTorch)/);
+    for (const b of p.bulletSuggestions) expect(b.suggestion).not.toMatch(/Git CI|with Redux|with PyTorch/);
+  });
+
+  it('claims the version-neutral name in the cover letter ("Java", not the ad\'s "Java 17")', () => {
+    const letter = analyzeOffline('Sam Lee\n- Built services in Java\nSKILLS\nJava, Git', 'Dev\nRequirements\n- Java 17\n- Git', 'en', NOW).coverLetter;
+    expect(letter).toMatch(/I have used (Java and Git|Git and Java)/);
+    expect(letter).not.toContain('Java 17');
+  });
+});
+
+describe('summary consistency', () => {
+  it('never says "nothing missing" when a required (soft) skill is missing, and flags low coverage', () => {
+    const p = analyzeOffline(SAMPLE_CV, 'Registered Nurse\nRequirements\n- Valid nursing licence\n- Compassion and communication', 'en', NOW);
+    expect(p.summary).not.toMatch(/No required skill is missing/);
+    expect(p.summary).toMatch(/Biggest gaps: Communication/);
+    expect(p.summary).toMatch(/Only 1 skill\(s\) of this ad/);
+  });
+  it('says so when the ad has no recognised required skill', () => {
+    const p = analyzeOffline(SAMPLE_CV, 'Dev\nNice to have\n- React\n- Docker', 'en', NOW);
+    expect(p.summary).toMatch(/No required skill was recognised/);
   });
 });

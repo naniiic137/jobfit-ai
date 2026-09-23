@@ -9,6 +9,12 @@ export const WEIGHTS = {
   softMultiplier: 0.5,
 } as const;
 
+/**
+ * Below this many recognised skills, the offline score says little about the
+ * ad (a nurse ad, or an ad full of tools the taxonomy does not know).
+ */
+export const LOW_COVERAGE = 4;
+
 export function skillWeight(skill: Pick<SkillAssessment, 'importance' | 'category'>): number {
   const base = skill.importance === 'required' ? WEIGHTS.required : WEIGHTS.nice;
   return skill.category === 'soft' ? base * WEIGHTS.softMultiplier : base;

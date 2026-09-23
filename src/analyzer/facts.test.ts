@@ -7,6 +7,8 @@ describe('estimateYears', () => {
   it('prefers an explicit statement', () => {
     expect(estimateYears('I have 4 years of experience in web development', NOW)).toBe(4);
     expect(estimateYears("3 ans d'expérience en développement", NOW)).toBe(3);
+    expect(estimateYears("Développeur passionné, 1 an d'expérience", NOW)).toBe(1);
+    expect(estimateYears('1 année d’expérience professionnelle', NOW)).toBe(1);
   });
 
   it('sums date ranges under the Experience heading only', () => {
@@ -52,6 +54,9 @@ describe('jobFacts', () => {
   it('parses key/value lines and French wording', () => {
     const f = jobFacts("Poste : Développeur React\nEntreprise : Carthage Tech\nMinimum 2 ans d'expérience");
     expect(f).toEqual({ title: 'Développeur React', company: 'Carthage Tech', minYears: 2 });
+  });
+  it('reads the French singular ("1 an d’expérience")', () => {
+    expect(jobFacts("Dev\n- Minimum 1 an d'expérience").minYears).toBe(1);
   });
   it('reads "3+ years of experience"', () => {
     expect(jobFacts('Dev\n- 3+ years of professional experience with React').minYears).toBe(3);
