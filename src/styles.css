@@ -496,6 +496,9 @@ main.container {
   font-size: 13px;
   color: var(--text-3);
 }
+.hint--warn {
+  color: var(--warn-text);
+}
 .alert {
   margin: 16px 0;
   padding: 14px 16px;

@@ -1,6 +1,9 @@
 import type { OutputLanguage } from '../types';
-import { FEW_SHOT_ANSWER, FEW_SHOT_CV, FEW_SHOT_JOB } from './fewshot';
+import { fewShotFor } from './fewshot';
+import { clip } from './limits';
 import { systemPrompt } from './system';
+
+export { MAX_INPUT_CHARS, clip, truncatedInputs } from './limits';
 
 export interface ChatMessage {
   role: 'user' | 'assistant';
@@ -10,14 +13,6 @@ export interface ChatMessage {
 export interface PromptBundle {
   system: string;
   messages: ChatMessage[];
-}
-
-/** Keep requests inside free-tier context limits; long CVs are rarely > 12k chars. */
-export const MAX_INPUT_CHARS = 12_000;
-
-export function clip(text: string, max = MAX_INPUT_CHARS): string {
-  const t = text.replace(/\r\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
-  return t.length <= max ? t : `${t.slice(0, max)}\n[…truncated]`;
 }
 
 /**
@@ -47,13 +42,14 @@ export function userMessage(cv: string, job: string, lang: OutputLanguage, preSc
   return parts.join('\n\n');
 }
 
-/** System prompt + one few-shot exchange + the real request. */
+/** System prompt + one few-shot exchange (in the output language) + the real request. */
 export function buildAnalysisPrompt(cv: string, job: string, lang: OutputLanguage, preScan?: PreScan): PromptBundle {
+  const example = fewShotFor(lang);
   return {
     system: systemPrompt(lang),
     messages: [
-      { role: 'user', content: userMessage(FEW_SHOT_CV, FEW_SHOT_JOB, 'en') },
-      { role: 'assistant', content: JSON.stringify(FEW_SHOT_ANSWER) },
+      { role: 'user', content: userMessage(example.cv, example.job, lang) },
+      { role: 'assistant', content: JSON.stringify(example.answer) },
       { role: 'user', content: userMessage(cv, job, lang, preScan) },
     ],
   };

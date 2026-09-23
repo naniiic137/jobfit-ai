@@ -30,6 +30,7 @@ import {
   type Theme,
 } from './lib/storage';
 import { runAnalysis } from './providers/run';
+import { truncatedInputs, truncationMessage } from './prompts/limits';
 import { ProviderError, type ProviderSettings } from './providers/types';
 import type { AnalysisResult, OutputLanguage } from './types';
 
@@ -79,6 +80,8 @@ export default function App() {
   }, [cv, job]);
 
   const canAnalyze = cv.trim().length >= MIN_CHARS && job.trim().length >= MIN_CHARS && !busy;
+  // Only LLM providers clip the input; the offline analyzer reads everything.
+  const truncated = settings.provider === 'offline' ? [] : truncatedInputs(cv, job);
 
   const analyze = useCallback(async () => {
     setError(null);
@@ -263,6 +266,11 @@ export default function App() {
         {!canAnalyze && !busy && (cv || job) && (
           <p className="hint">Both texts need at least {MIN_CHARS} characters.</p>
         )}
+        {truncated.map((t) => (
+          <p key={t.field} className="hint hint--warn" role="note">
+            {truncationMessage(t)}
+          </p>
+        ))}
 
         <p className="sr-only" role="status" aria-live="polite">
           {status}

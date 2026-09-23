@@ -1,12 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { AnalysisPayloadSchema, analysisJsonSchema } from './analysis';
-import { FEW_SHOT_ANSWER } from '../prompts/fewshot';
+import { FEW_SHOT_ANSWER, FEW_SHOT_FR_ANSWER } from '../prompts/fewshot';
 
 const clone = <T>(x: T): T => JSON.parse(JSON.stringify(x)) as T;
 
 describe('AnalysisPayloadSchema', () => {
-  it('accepts the few-shot example (so the prompt never teaches an invalid shape)', () => {
+  it('accepts the few-shot examples (so the prompt never teaches an invalid shape)', () => {
     expect(AnalysisPayloadSchema.safeParse(FEW_SHOT_ANSWER).success).toBe(true);
+    expect(AnalysisPayloadSchema.safeParse(FEW_SHOT_FR_ANSWER).success).toBe(true);
   });
 
   it('rejects a missing required field', () => {

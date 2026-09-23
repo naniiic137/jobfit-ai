@@ -1,6 +1,8 @@
 import { analyzeOffline, buildContext } from '../analyzer/offline';
 import { finalize } from '../analyzer/finalize';
 import { buildAnalysisPrompt, buildRepairPrompt, type PreScan } from '../prompts/build';
+import { truncatedInputs, truncationMessage } from '../prompts/limits';
+import { PROMPT_VERSION } from '../prompts/system';
 import { AnalysisPayloadSchema, analysisJsonSchema, type AnalysisPayload } from '../schemas/analysis';
 import type { AnalysisResult, OutputLanguage } from '../types';
 import { geminiClient } from './gemini';
@@ -112,5 +114,9 @@ export async function runAnalysis(
     return { result: finalize(payload, { cv, language: lang, provider: 'offline', model: null }), info: null };
   }
   const { payload, info } = await completeWithRepair(client, cv, job, lang, { preScan: preScan(cv, job), signal });
-  return { result: finalize(payload, { cv, language: lang, provider: client.id, model: client.model }), info };
+  const extraNotes = truncatedInputs(cv, job).map((t) => truncationMessage(t));
+  return {
+    result: finalize(payload, { cv, language: lang, provider: client.id, model: client.model, promptVersion: PROMPT_VERSION, extraNotes }),
+    info,
+  };
 }

@@ -1,7 +1,8 @@
 import type { OutputLanguage } from '../types';
 import { SKILL_CATEGORIES } from '../schemas/categories';
 
-export const PROMPT_VERSION = '1.0.0';
+/** Bump when the prompt or few-shot examples change; stored on every LLM result. */
+export const PROMPT_VERSION = '1.1.0';
 
 const LANGUAGE_NAME: Record<OutputLanguage, string> = { en: 'English', fr: 'French' };
 

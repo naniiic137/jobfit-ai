@@ -68,7 +68,10 @@ export function Results({ result, initialTab = 'bullets' }: { result: AnalysisRe
             {result.company && <span className="results__company"> · {result.company}</span>}
           </h2>
         </div>
-        <span className={`badge badge--${result.provider}`} title={result.model ?? undefined}>
+        <span
+          className={`badge badge--${result.provider}`}
+          title={result.model ? `${result.model}${result.promptVersion ? ` · prompt v${result.promptVersion}` : ''}` : undefined}
+        >
           {PROVIDER_LABEL[result.provider]}
           {result.model ? ` · ${result.model}` : ''}
         </span>

@@ -52,6 +52,9 @@ export interface FinalizeMeta {
   language: OutputLanguage;
   provider: ProviderId;
   model: string | null;
+  promptVersion?: string | null;
+  /** App-side notes appended after the provider's own (e.g. "the CV was truncated"). */
+  extraNotes?: string[];
   now?: Date;
 }
 
@@ -62,12 +65,14 @@ export function finalize(payload: AnalysisPayload, meta: FinalizeMeta): Analysis
   const now = meta.now ?? new Date();
   return {
     ...payload,
+    notes: [...payload.notes, ...(meta.extraNotes ?? [])],
     skills,
     id: `${now.getTime().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
     createdAt: now.toISOString(),
     language: meta.language,
     provider: meta.provider,
     model: meta.model,
+    promptVersion: meta.promptVersion ?? null,
     scoreDetails: computeScore(scored),
     breakdown: computeBreakdown(scored),
   };

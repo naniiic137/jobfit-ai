@@ -32,6 +32,8 @@ export interface AnalysisResult extends Omit<AnalysisPayload, 'skills'> {
   language: OutputLanguage;
   provider: ProviderId;
   model: string | null;
+  /** Version of the prompt that produced an LLM result (null for offline analyses). */
+  promptVersion: string | null;
   skills: VerifiedSkill[];
   scoreDetails: ScoreDetails;
   breakdown: CategoryBreakdown[];

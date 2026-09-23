@@ -80,6 +80,7 @@ describe('runAnalysis', () => {
     expect(result.provider).toBe('offline');
     expect(result.scoreDetails.score).toBeGreaterThan(0);
     expect(info).toBeNull();
+    expect(result.promptVersion).toBeNull();
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
@@ -96,6 +97,14 @@ describe('runAnalysis', () => {
     expect((init.headers as Record<string, string>)['x-goog-api-key']).toBe('test-key');
     expect(result.provider).toBe('gemini');
     expect(result.skills.find((s) => s.name === 'Vue.js')!.verified).toBe(true);
+    expect(result.promptVersion).toMatch(/^\d+\.\d+\.\d+$/);
+  });
+
+  it('adds a note when the CV had to be truncated for the model', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: GOOD }] } }] }), { status: 200 })));
+    const settings = { ...DEFAULT_SETTINGS, provider: 'gemini' as const, gemini: { apiKey: 'k', model: 'm' } };
+    const { result } = await runAnalysis(settings, FEW_SHOT_CV + '\n' + 'x '.repeat(7000), FEW_SHOT_JOB, 'en');
+    expect(result.notes.at(-1)).toMatch(/Your CV is .* only the first 12,000 are sent to the model/);
   });
 
   it('surfaces HTTP errors with a helpful message', async () => {
