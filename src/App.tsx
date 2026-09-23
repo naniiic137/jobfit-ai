@@ -65,6 +65,9 @@ export default function App() {
   const fileRef = useRef<HTMLInputElement>(null);
   const abortRef = useRef<AbortController | null>(null);
 
+  // Never leave a request running after the app goes away.
+  useEffect(() => () => abortRef.current?.abort(), []);
+
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
     saveTheme(theme);
@@ -91,7 +94,10 @@ export default function App() {
       setStatus(`Analysis ready: score ${r.scoreDetails.score} out of 100${info?.repaired ? ' (model output was repaired once)' : ''}.`);
       requestAnimationFrame(() => resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
     } catch (e) {
-      if ((e as Error).name === 'AbortError') return;
+      if ((e as Error).name === 'AbortError') {
+        setStatus('Analysis cancelled.');
+        return;
+      }
       const pe = e instanceof ProviderError ? e : null;
       setError({ message: (e as Error).message, hint: pe?.hint });
       setStatus('');
@@ -243,6 +249,11 @@ export default function App() {
                 </button>
               ))}
             </div>
+            {busy && settings.provider !== 'offline' && (
+              <button type="button" className="btn btn--ghost btn--lg" onClick={() => abortRef.current?.abort()}>
+                Cancel
+              </button>
+            )}
             <button type="button" className="btn btn--primary btn--lg" onClick={analyze} disabled={!canAnalyze} aria-busy={busy}>
               {busy ? <span className="spinner" aria-hidden="true" /> : <IconArrowRight />}
               {busy ? 'Analysing…' : 'Analyse match'}

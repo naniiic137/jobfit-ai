@@ -32,7 +32,7 @@ export function geminiClient(apiKey: string, model: string): LlmClient {
     async complete(req: CompletionRequest) {
       if (!apiKey) throw new ProviderError('Add a Gemini API key in Settings (free at aistudio.google.com).');
       const url = `${BASE}/models/${encodeURIComponent(model)}:generateContent`;
-      const data = (await postJson(url, geminiRequestBody(req), { 'x-goog-api-key': apiKey }, req.signal)) as GeminiResponse;
+      const data = (await postJson(url, geminiRequestBody(req), { headers: { 'x-goog-api-key': apiKey }, signal: req.signal })) as GeminiResponse;
       if (data.promptFeedback?.blockReason) throw new ProviderError(`Gemini blocked the request (${data.promptFeedback.blockReason}).`);
       const parts = data.candidates?.[0]?.content?.parts ?? [];
       const text = parts.filter((p) => !p.thought).map((p) => p.text ?? '').join('');

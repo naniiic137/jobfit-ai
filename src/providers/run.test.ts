@@ -2,6 +2,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { completeWithRepair, extractJson, runAnalysis, validatePayload } from './run';
 import { FEW_SHOT_ANSWER, FEW_SHOT_CV, FEW_SHOT_JOB } from '../prompts/fewshot';
 import { geminiClient, geminiRequestBody } from './gemini';
+import { postJson } from './http';
+import { openAiCompatClient } from './openaiCompat';
 import { DEFAULT_SETTINGS, ProviderError, type CompletionRequest, type LlmClient } from './types';
 import { buildAnalysisPrompt } from '../prompts/build';
 import { SAMPLE_CV, SAMPLE_JOB } from '../data/samples';
@@ -113,5 +115,73 @@ describe('geminiRequestBody', () => {
     expect(body.contents.map((c) => c.role)).toEqual(['user', 'model', 'user']);
     expect(body.systemInstruction.parts[0]!.text).toMatch(/Grounding rules/);
     expect(body.generationConfig).toMatchObject({ responseMimeType: 'application/json', responseJsonSchema: { type: 'object' } });
+  });
+});
+
+describe('postJson timeout and cancel', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  /** A fetch that never answers, but rejects like the real one when its signal aborts. */
+  const hangingFetch = () =>
+    vi.fn(
+      (_url: string, init: RequestInit) =>
+        new Promise<Response>((_resolve, reject) => {
+          init.signal!.addEventListener('abort', () => reject(init.signal!.reason));
+        }),
+    );
+
+  it('turns a slow provider into a readable "timed out" error', async () => {
+    vi.stubGlobal('fetch', hangingFetch());
+    const err = await postJson('https://api.example.com/v1/chat', {}, { timeoutMs: 30 }).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ProviderError);
+    expect((err as ProviderError).message).toMatch(/api\.example\.com timed out after 0 s/);
+    expect((err as ProviderError).hint).toMatch(/offline mode/);
+  });
+
+  it('lets a user cancel through as an AbortError (not an error message)', async () => {
+    vi.stubGlobal('fetch', hangingFetch());
+    const ctrl = new AbortController();
+    const p = postJson('https://api.example.com/v1/chat', {}, { signal: ctrl.signal, timeoutMs: 60_000 });
+    ctrl.abort();
+    const err = await p.catch((e: unknown) => e);
+    expect(err).not.toBeInstanceOf(ProviderError);
+    expect((err as Error).name).toBe('AbortError');
+  });
+});
+
+describe('openAiCompatClient', () => {
+  afterEach(() => vi.unstubAllGlobals());
+  const ok = () => new Response(JSON.stringify({ choices: [{ message: { content: GOOD } }] }), { status: 200 });
+  const bodyOf = (call: unknown[]) => JSON.parse((call[1] as RequestInit).body as string) as { response_format: { type: string; json_schema?: { schema: unknown } } };
+
+  it('asks for the exact JSON Schema first', async () => {
+    const fetchSpy = vi.fn(async () => ok());
+    vi.stubGlobal('fetch', fetchSpy);
+    const c = openAiCompatClient('https://api.example.com/v1/', 'k', 'model-a');
+    await c.complete({ prompt: buildAnalysisPrompt('cv', 'job', 'en'), jsonSchema: { type: 'object' } });
+    const body = bodyOf(fetchSpy.mock.calls[0] as unknown[]);
+    expect(body.response_format.type).toBe('json_schema');
+    expect(body.response_format.json_schema!.schema).toEqual({ type: 'object' });
+    expect((fetchSpy.mock.calls[0] as unknown[])[0]).toBe('https://api.example.com/v1/chat/completions');
+  });
+
+  it('falls back to json_object when the endpoint rejects json_schema with a 400, and remembers it', async () => {
+    const fetchSpy = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ error: { message: 'response_format json_schema not supported' } }), { status: 400 }))
+      .mockImplementation(async () => ok());
+    vi.stubGlobal('fetch', fetchSpy);
+    const c = openAiCompatClient('https://old.example.com/v1', '', 'model-b');
+    const req = { prompt: buildAnalysisPrompt('cv', 'job', 'en'), jsonSchema: { type: 'object' } };
+    expect(await c.complete(req)).toBe(GOOD);
+    expect(fetchSpy.mock.calls.map((call) => bodyOf(call as unknown[]).response_format.type)).toEqual(['json_schema', 'json_object']);
+    await c.complete(req);
+    expect(bodyOf(fetchSpy.mock.calls[2] as unknown[]).response_format.type).toBe('json_object');
+  });
+
+  it('does not hide other errors behind the fallback', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('{"error":"bad key"}', { status: 401 })));
+    const c = openAiCompatClient('https://api.example.com/v1', 'bad', 'model-c');
+    await expect(c.complete({ prompt: buildAnalysisPrompt('cv', 'job', 'en'), jsonSchema: {} })).rejects.toThrow(/HTTP 401: bad key Check your API key/);
   });
 });

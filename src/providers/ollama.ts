@@ -26,7 +26,7 @@ export function ollamaClient(baseUrl: string, model: string): LlmClient {
         options: { temperature: 0.3, num_ctx: 16384 },
         messages: [{ role: 'system', content: prompt.system }, ...prompt.messages],
       };
-      const data = (await postJson(`${root}/api/chat`, body, {}, signal, OLLAMA_CORS_HINT)) as OllamaChatResponse;
+      const data = (await postJson(`${root}/api/chat`, body, { signal, hint: OLLAMA_CORS_HINT })) as OllamaChatResponse;
       if (data.error) throw new ProviderError(`Ollama: ${data.error}`);
       const text = data.message?.content ?? '';
       if (!text) throw new ProviderError('Ollama returned an empty message.');
